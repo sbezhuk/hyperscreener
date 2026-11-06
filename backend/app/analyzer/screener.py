@@ -3,21 +3,58 @@ from typing import List, Dict, Any
 from ..hyperliquid import hl_client
 from ..ws_manager import hl_ws_manager
 from .levels import analyze_levels
+from .mtf_levels import mtf_levels_manager
 from .fvg import detect_fvgs
 from .liquidity import detect_liquidity_and_sweeps
 from .structure import analyze_market_structure
 
 async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -> Dict[str, Any]:
     """
-    Performs complete technical & SMC analysis for a single coin strictly for the requested timeframe.
-    Each timeframe calculates and maintains its own independent support & resistance levels.
+    Performs complete technical & SMC analysis for a single coin strictly for the requested timeframe,
+    and calculates independent Multi-Timeframe (MTF) levels across all timeframes.
     """
     candles = await hl_client.get_candles(coin=coin, interval=interval, limit=limit)
     if not candles:
         return {}
 
     current_price = candles[-1]["close"]
-    levels_data = analyze_levels(candles, interval=interval)
+
+    # 1. Multi-Timeframe Levels Engine (Parallel calculation with in-memory caching)
+    mtf_levels = await mtf_levels_manager.get_all_timeframe_levels(
+        coin=coin,
+        current_price=current_price,
+        active_interval=interval,
+        active_candles=candles
+    )
+
+    # 2. Extract active timeframe levels and compute cascades
+    clean_tf = interval.lower()
+    active_data = mtf_levels.get(clean_tf, {"resistances": [], "supports": []})
+    active_res = active_data.get("resistances", [])
+    active_sup = active_data.get("supports", [])
+
+    cascades = []
+    if len(active_res) >= 2:
+        r1, r2 = active_res[0], active_res[1]
+        c1 = r1.get("center_price", r1.get("price", 0))
+        c2 = r2.get("center_price", r2.get("price", 0))
+        if c1 > 0:
+            diff = (c2 - c1) / c1 * 100
+            if diff < 2.5 and r1.get("touches", 0) >= 2:
+                cascades.append({
+                    "type": "resistance_cascade",
+                    "levels": [r1["price"], r2["price"]],
+                    "desc": f"Каскад зон опору ({r1['price']}, {r2['price']})",
+                    "distPct": r1["distPct"],
+                })
+
+    levels_data = {
+        "currentPrice": current_price,
+        "resistances": active_res,
+        "supports": active_sup,
+        "cascades": cascades,
+    }
+
     fvgs = detect_fvgs(candles, interval=interval)
     liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval)
     structure_data = analyze_market_structure(candles)
@@ -130,6 +167,7 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -
         "currentPrice": current_price,
         "candles": candles,
         "levels": levels_data,
+        "multiTimeframeLevels": mtf_levels,
         "fvgs": fvgs,
         "liquidity": liquidity_data,
         "structure": structure_data,

@@ -312,10 +312,11 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
 
-        // Badge text: clean ОПІР with touches and score anchored cleanly at the right edge
+        // Badge text: clean ОПІР with timeframe, touches and score anchored cleanly at the right edge
         const sc = r.strength_score !== undefined ? Math.round(r.strength_score) : undefined;
         const retestPart = r.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
-        const badgeText = `ОПІР x${r.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
+        const tfBadge = r.timeframe ? ` [${r.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
+        const badgeText = `ОПІР${tfBadge} x${r.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
         drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'right');
       });
 
@@ -353,10 +354,11 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
 
-        // Badge text: clean ПІДТРИМКА with touches and score anchored cleanly at the right edge
+        // Badge text: clean ПІДТРИМКА with timeframe, touches and score anchored cleanly at the right edge
         const sc = s.strength_score !== undefined ? Math.round(s.strength_score) : undefined;
         const retestPart = s.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
-        const badgeText = `ПІДТРИМКА x${s.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
+        const tfBadge = s.timeframe ? ` [${s.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
+        const badgeText = `ПІДТРИМКА${tfBadge} x${s.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
         drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'right');
       });
     }

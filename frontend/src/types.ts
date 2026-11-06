@@ -77,6 +77,7 @@ export interface AnalysisData {
       distPct: number;
     }>;
   };
+  multiTimeframeLevels?: Record<string, { resistances: LevelItem[]; supports: LevelItem[] }>;
   fvgs: FVGItem[];
   liquidity: {
     pools: Array<{

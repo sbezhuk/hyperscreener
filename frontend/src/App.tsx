@@ -5,7 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
-import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem } from './types';
+import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem } from './types';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
@@ -15,6 +15,10 @@ export function App() {
   const [timeframe, setTimeframe] = useState<Timeframe>('1D');
   const [activeFormation, setActiveFormation] = useState<FormationFilter>('CASCADE');
   
+  // Multi-Timeframe Controls: by default only the active timeframe is enabled
+  const [selectedTfs, setSelectedTfs] = useState<string[]>([timeframe.toLowerCase()]);
+  const [minStrength, setMinStrength] = useState<number>(50);
+
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [allCoins, setAllCoins] = useState<CoinMeta[]>([]);
   const [screenerData, setScreenerData] = useState<ScreenerItem[]>([]);
@@ -267,6 +271,51 @@ export function App() {
   const currentCoinMeta = allCoins.find((c) => c.name === selectedCoin);
   const currentPrice = analysis?.currentPrice || currentCoinMeta?.markPrice || 0;
 
+  // Multi-Timeframe Level Filtering (Section 2.6)
+  const { filteredResistances, filteredSupports } = React.useMemo(() => {
+    if (!analysis) return { filteredResistances: [], filteredSupports: [] };
+
+    if (analysis.multiTimeframeLevels) {
+      const res: LevelItem[] = [];
+      const sup: LevelItem[] = [];
+
+      selectedTfs.forEach((tf) => {
+        const tfData = analysis.multiTimeframeLevels?.[tf];
+        if (!tfData) return;
+
+        (tfData.resistances || []).forEach((r) => {
+          const score = r.strength_score ?? 50;
+          if (score >= minStrength) {
+            res.push({ ...r, timeframe: tf });
+          }
+        });
+
+        (tfData.supports || []).forEach((s) => {
+          const score = s.strength_score ?? 50;
+          if (score >= minStrength) {
+            sup.push({ ...s, timeframe: tf });
+          }
+        });
+      });
+
+      res.sort((a, b) => a.price - b.price);
+      sup.sort((a, b) => b.price - a.price);
+
+      return { filteredResistances: res, filteredSupports: sup };
+    }
+
+    return {
+      filteredResistances: analysis.levels.resistances || [],
+      filteredSupports: analysis.levels.supports || [],
+    };
+  }, [analysis, selectedTfs, minStrength]);
+
+  const handleToggleTf = (tf: string) => {
+    setSelectedTfs((prev) =>
+      prev.includes(tf) ? prev.filter((t) => t !== tf) : [...prev, tf]
+    );
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0e11] text-gray-200 overflow-hidden font-sans">
       {/* Top Header */}
@@ -276,6 +325,7 @@ export function App() {
         timeframe={timeframe}
         onTimeframeChange={(newTf) => {
           setTimeframe(newTf);
+          setSelectedTfs([newTf.toLowerCase()]);
         }}
         onOpenScreener={() => {
           setIsScreenerOpen(true);
@@ -286,8 +336,15 @@ export function App() {
         wsStatus={wsStatus}
       />
 
-      {/* Formations Filter Bar */}
-      <FormationsBar active={activeFormation} onChange={setActiveFormation} />
+      {/* Formations & Multi-Timeframe Filter Bar */}
+      <FormationsBar
+        active={activeFormation}
+        onChange={setActiveFormation}
+        selectedTfs={selectedTfs}
+        onToggleTf={handleToggleTf}
+        minStrength={minStrength}
+        onMinStrengthChange={setMinStrength}
+      />
 
       {/* Main Workspace (Chart + Right Sidebar) */}
       <div className="flex flex-1 overflow-hidden relative">
@@ -295,8 +352,8 @@ export function App() {
           {analysis && analysis.candles && analysis.candles.length > 0 ? (
             <Chart
               candles={analysis.candles}
-              resistances={analysis.levels.resistances}
-              supports={analysis.levels.supports}
+              resistances={filteredResistances}
+              supports={filteredSupports}
               fvgs={analysis.fvgs}
               signals={analysis.signals}
               liquidity={analysis.liquidity}
@@ -314,8 +371,8 @@ export function App() {
 
         {/* Right Sidebar with Levels and Formations */}
         <SidebarLevels
-          resistances={analysis?.levels.resistances || []}
-          supports={analysis?.levels.supports || []}
+          resistances={filteredResistances}
+          supports={filteredSupports}
           signals={analysis?.signals || []}
           structure={analysis?.structure}
           openInterest={currentCoinMeta?.openInterest}
