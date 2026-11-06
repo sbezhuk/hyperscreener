@@ -108,27 +108,69 @@ export const Chart: React.FC<ChartProps> = ({
     };
   }, []);
 
+  const prevCandlesLenRef = useRef<number>(0);
+  // True after the first successful setData() for the current context.
+  // Reset to false whenever coin/interval changes so a fresh setData() is always called first.
+  const initializedRef = useRef<boolean>(false);
+
   // 2. Update Candles Data & preserve user scroll/zoom position!
   useEffect(() => {
     if (!candleSeriesRef.current || !chartRef.current || candles.length === 0) return;
 
-    candleSeriesRef.current.setData(
-      candles.map((c) => ({
-        time: c.time as any,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      }))
-    );
-
-    const isNewContext =
+    const isContextChanged =
       prevContextRef.current.coin !== coin ||
       prevContextRef.current.interval !== (interval || '');
 
-    if (isNewContext) {
-      chartRef.current.timeScale().fitContent();
-      prevContextRef.current = { coin, interval: interval || '' };
+    const mappedCandles = candles.map((c) => ({
+      time: c.time as any,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+
+    // Always do a full setData() when:
+    // 1. The coin or interval changed (new context)
+    // 2. We have never successfully loaded data for this context yet (initializedRef is false)
+    // 3. A big batch arrived (not a single WS tick)
+    const isBigBatch = initializedRef.current && Math.abs(candles.length - prevCandlesLenRef.current) > 1;
+
+    if (isContextChanged || !initializedRef.current || isBigBatch) {
+      if (isContextChanged) {
+        // Reset state for the new context BEFORE calling setData
+        initializedRef.current = false;
+        prevCandlesLenRef.current = 0;
+        prevContextRef.current = { coin, interval: interval || '' };
+      }
+
+      try {
+        candleSeriesRef.current.setData(mappedCandles);
+        chartRef.current.timeScale().fitContent();
+        // Mark as initialized ONLY after successful setData
+        initializedRef.current = true;
+        prevCandlesLenRef.current = candles.length;
+      } catch (err) {
+        console.error('Error in candleSeries.setData:', err);
+        // Do NOT set initializedRef = true so the next render retries setData
+      }
+      return;
+    }
+
+    // Incremental real-time update — single candle tick from WebSocket
+    const lastCandle = candles[candles.length - 1];
+    try {
+      candleSeriesRef.current.update({
+        time: lastCandle.time as any,
+        open: lastCandle.open,
+        high: lastCandle.high,
+        low: lastCandle.low,
+        close: lastCandle.close,
+      });
+      prevCandlesLenRef.current = candles.length;
+    } catch (err) {
+      // LightweightCharts threw (e.g. time regression) — fallback to full reload
+      console.warn('candle.update() failed, falling back to setData:', err);
+      initializedRef.current = false; // force full reload on next render
     }
   }, [candles, coin, interval]);
 

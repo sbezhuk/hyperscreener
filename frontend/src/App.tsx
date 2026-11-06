@@ -8,6 +8,7 @@ import { AlertToast } from './components/AlertToast';
 import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem } from './types';
 
 const API_BASE = 'http://localhost:8000';
+const WS_BASE = 'ws://localhost:8000/ws';
 
 export function App() {
   const [selectedCoin, setSelectedCoin] = useState<string>('ETH');
@@ -21,9 +22,18 @@ export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isScreenerLoading, setIsScreenerLoading] = useState<boolean>(false);
   const [isScreenerOpen, setIsScreenerOpen] = useState<boolean>(false);
+  const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
 
   // AbortController ref to cancel obsolete in-flight analysis requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<any>(null);
+  const selectedCoinRef = useRef(selectedCoin);
+  const timeframeRef = useRef(timeframe);
+  const prevSubRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
+
+  selectedCoinRef.current = selectedCoin;
+  timeframeRef.current = timeframe;
 
   // 1. Fetch Coins List on mount
   useEffect(() => {
@@ -88,13 +98,170 @@ export function App() {
       });
   }, []);
 
-  // Trigger analysis when selectedCoin or timeframe changes
+  // 4. WebSocket Manager for Real-Time Hyperliquid Ticks & Instant Sweeps
+  const connectWebSocket = useCallback(() => {
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    try {
+      const ws = new WebSocket(WS_BASE);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsStatus('connected');
+        // Subscribe to current coin & interval immediately on connect
+        ws.send(
+          JSON.stringify({
+            action: 'subscribe',
+            coin: selectedCoinRef.current,
+            interval: timeframeRef.current.toLowerCase(),
+          })
+        );
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'ws_status') {
+            setWsStatus(data.status === 'connected' ? 'connected' : 'reconnecting');
+          } else if (data.type === 'candle_tick') {
+            const currentCoin = selectedCoinRef.current.toUpperCase();
+            const currentTf = timeframeRef.current.toLowerCase();
+
+            if (data.coin?.toUpperCase() === currentCoin && data.interval?.toLowerCase() === currentTf) {
+              setAnalysis((prev) => {
+                if (!prev) return prev;
+                // Guard: Do not apply tick to stale coin or timeframe
+                if (
+                  prev.coin?.toUpperCase() !== currentCoin ||
+                  prev.interval?.toLowerCase() !== currentTf
+                ) {
+                  return prev;
+                }
+
+                const updatedCandles = [...prev.candles];
+                const newCandle = data.candle;
+
+                if (updatedCandles.length > 0) {
+                  const lastIdx = updatedCandles.length - 1;
+                  if (updatedCandles[lastIdx].time === newCandle.time) {
+                    updatedCandles[lastIdx] = newCandle;
+                  } else if (newCandle.time > updatedCandles[lastIdx].time) {
+                    updatedCandles.push(newCandle);
+                    if (updatedCandles.length > 300) updatedCandles.shift();
+                  }
+                }
+
+                let updatedSignals = prev.signals || [];
+                let updatedSweeps = prev.liquidity?.sweeps || [];
+
+                // Live sweep detected in real time!
+                if (data.sweep) {
+                  const sw = data.sweep;
+                  const alreadyExists = updatedSweeps.some(
+                    (s) => s.levelPrice === sw.levelPrice && Math.abs(s.time - sw.time) < 60
+                  );
+                  if (!alreadyExists) {
+                    updatedSweeps = [sw, ...updatedSweeps].slice(0, 3);
+                    const sweepSignal = {
+                      id: `live-sweep-${sw.levelPrice}-${sw.time}`,
+                      coin: data.coin,
+                      interval: data.interval,
+                      category: 'sweep' as const,
+                      title: sw.formation,
+                      direction: sw.direction,
+                      desc: sw.desc,
+                      price: sw.levelPrice,
+                      time: sw.time,
+                    };
+                    updatedSignals = [sweepSignal, ...updatedSignals];
+                  }
+                }
+
+                return {
+                  ...prev,
+                  currentPrice: data.currentPrice,
+                  candles: updatedCandles,
+                  signals: updatedSignals,
+                  liquidity: {
+                    ...prev.liquidity,
+                    sweeps: updatedSweeps,
+                    pools: prev.liquidity?.pools || [],
+                    trendlines: prev.liquidity?.trendlines || [],
+                  },
+                };
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error handling WS message:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        setWsStatus('reconnecting');
+        wsRef.current = null;
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 2000);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    } catch (err) {
+      setWsStatus('disconnected');
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+    }
+  }, []);
+
+  // Connect WebSocket on component mount
+  useEffect(() => {
+    connectWebSocket();
+    return () => {
+      clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [connectWebSocket]);
+
+  // Trigger analysis when selectedCoin or timeframe changes + switch WS subscription
   useEffect(() => {
     fetchAnalysis(selectedCoin, timeframe);
-    const interval = setInterval(() => {
+
+    // Switch WebSocket subscription to the newly selected coin / timeframe
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (prevSubRef.current.coin && prevSubRef.current.interval) {
+        wsRef.current.send(
+          JSON.stringify({
+            action: 'unsubscribe',
+            coin: prevSubRef.current.coin,
+            interval: prevSubRef.current.interval.toLowerCase(),
+          })
+        );
+      }
+
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'subscribe',
+          coin: selectedCoin,
+          interval: timeframe.toLowerCase(),
+        })
+      );
+    }
+    prevSubRef.current = { coin: selectedCoin, interval: timeframe };
+
+    // Gentle background sync every 60s for higher-level structure refresh (replaces 6s spam polling)
+    const backgroundSync = setInterval(() => {
       fetchAnalysis(selectedCoin, timeframe);
-    }, 6000); // refresh candle data every 6 seconds
-    return () => clearInterval(interval);
+    }, 60000);
+
+    return () => clearInterval(backgroundSync);
   }, [selectedCoin, timeframe, fetchAnalysis]);
 
   const currentCoinMeta = allCoins.find((c) => c.name === selectedCoin);
@@ -116,6 +283,7 @@ export function App() {
         }}
         onRefresh={() => fetchAnalysis(selectedCoin, timeframe)}
         isLoading={isLoading}
+        wsStatus={wsStatus}
       />
 
       {/* Formations Filter Bar */}

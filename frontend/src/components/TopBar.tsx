@@ -10,6 +10,7 @@ interface TopBarProps {
   onOpenScreener: () => void;
   onRefresh: () => void;
   isLoading: boolean;
+  wsStatus?: 'connected' | 'reconnecting' | 'disconnected';
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -20,6 +21,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenScreener,
   onRefresh,
   isLoading,
+  wsStatus = 'connected',
 }) => {
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
 
@@ -40,9 +42,31 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="text-xs text-gray-400 font-medium hidden sm:inline">
             USDT perpetual · Hyperliquid
           </span>
-          <div className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse"></span>
-            LIVE
+          <div
+            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-mono font-medium transition ${
+              wsStatus === 'connected'
+                ? 'text-emerald-400 bg-emerald-500/10'
+                : wsStatus === 'reconnecting'
+                ? 'text-amber-400 bg-amber-500/10'
+                : 'text-red-400 bg-red-500/10'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                wsStatus === 'connected'
+                  ? 'bg-[#0ecb81] animate-pulse'
+                  : wsStatus === 'reconnecting'
+                  ? 'bg-amber-400 animate-ping'
+                  : 'bg-red-500'
+              }`}
+            />
+            <span>
+              {wsStatus === 'connected'
+                ? 'WS LIVE'
+                : wsStatus === 'reconnecting'
+                ? 'RECONNECTING'
+                : 'OFFLINE'}
+            </span>
           </div>
         </div>
 

@@ -1,14 +1,16 @@
 import asyncio
 from typing import List, Dict, Any
 from ..hyperliquid import hl_client
+from ..ws_manager import hl_ws_manager
 from .levels import analyze_levels
 from .fvg import detect_fvgs
 from .liquidity import detect_liquidity_and_sweeps
 from .structure import analyze_market_structure
 
-async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 250) -> Dict[str, Any]:
+async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -> Dict[str, Any]:
     """
-    Performs complete technical & SMC analysis for a single coin on Hyperliquid.
+    Performs complete technical & SMC analysis for a single coin strictly for the requested timeframe.
+    Each timeframe calculates and maintains its own independent support & resistance levels.
     """
     candles = await hl_client.get_candles(coin=coin, interval=interval, limit=limit)
     if not candles:
@@ -113,6 +115,14 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 250) -
                 "distPct": round(dist_to_gap, 2),
                 "time": fvg["startTime"]
             })
+
+    # Register active levels with WS manager for millisecond-level live sweep detection
+    hl_ws_manager.update_levels(
+        coin=coin,
+        interval=interval,
+        resistances=levels_data.get("resistances", []),
+        supports=levels_data.get("supports", [])
+    )
 
     return {
         "coin": coin,

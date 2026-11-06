@@ -20,6 +20,21 @@ export interface LevelItem {
   firstTime?: number;
   latestTime?: number;
   strength: number;
+  // New fields (populated by the comprehensive algorithm):
+  zone_id?: string;
+  type?: 'support' | 'resistance';
+  upper_price?: number;
+  lower_price?: number;
+  center_price?: number;
+  strength_score?: number;
+  touches_count?: number;
+  average_bounce_atr?: number;
+  volume_confirmation?: number;
+  timeframe?: string;
+  first_detected_at?: number;
+  last_tested_at?: number;
+  status?: 'active' | 'weakening' | 'broken' | 'retested';
+  is_htf?: boolean;
 }
 
 export interface FVGItem {

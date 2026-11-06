@@ -272,7 +272,16 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
 
     // 4. Draw Cascade / Support & Resistance Zones
     if (activeFormation === 'CASCADE') {
+      // Helper: resolve fill opacity from strength_score (0-100) → 0.06..0.18
+      const fillOpacity = (score?: number) => {
+        const s = score ?? 50;
+        return 0.06 + (Math.min(s, 100) / 100) * 0.12;
+      };
+
+      // Draw Resistances (ALWAYS RED)
       resistances.forEach((r) => {
+        if (!r.price || r.touches < 1) return;
+
         const yTop = candleSeries.priceToCoordinate(r.top);
         const yBottom = candleSeries.priceToCoordinate(r.bottom);
         if (yTop === null || yBottom === null) return;
@@ -284,12 +293,18 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const boxHeight = Math.max(Math.abs(yBottom - yTop), 3);
         const minY = Math.min(yTop, yBottom);
 
-        ctx.fillStyle = r.touches >= 2 ? 'rgba(246, 70, 93, 0.09)' : 'rgba(246, 70, 93, 0.05)';
+        const isWeakening = r.status === 'weakening';
+        const opacity = fillOpacity(r.strength_score);
+
+        // Fill - Red
+        ctx.fillStyle = `rgba(246, 70, 93, ${opacity})`;
         ctx.fillRect(xStart, minY, boxWidth, boxHeight);
 
-        ctx.strokeStyle = r.touches >= 2 ? 'rgba(246, 70, 93, 0.65)' : 'rgba(246, 70, 93, 0.35)';
+        // Border - Red
+        const borderAlpha = r.touches >= 3 ? 0.75 : 0.45;
+        ctx.strokeStyle = `rgba(246, 70, 93, ${borderAlpha})`;
+        ctx.setLineDash([]);
         ctx.lineWidth = 1;
-
         ctx.beginPath();
         ctx.moveTo(xStart, minY);
         ctx.lineTo(maxRightX, minY);
@@ -297,12 +312,17 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
 
-        // Badge placed inside the zone on the left, completely separated from the price scale!
-        const badgeText = `ОПІР ${r.touches > 1 ? `x${r.touches} ` : ''}[${r.bottom} - ${r.top}]`;
-        drawBadge(ctx, badgeText, xStart + 12, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'left');
+        // Badge text: clean ОПІР with touches and score anchored cleanly at the right edge
+        const sc = r.strength_score !== undefined ? Math.round(r.strength_score) : undefined;
+        const retestPart = r.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
+        const badgeText = `ОПІР x${r.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'right');
       });
 
+      // Draw Supports (ALWAYS GREEN)
       supports.forEach((s) => {
+        if (!s.price || s.touches < 1) return;
+
         const yTop = candleSeries.priceToCoordinate(s.top);
         const yBottom = candleSeries.priceToCoordinate(s.bottom);
         if (yTop === null || yBottom === null) return;
@@ -314,12 +334,18 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const boxHeight = Math.max(Math.abs(yBottom - yTop), 3);
         const minY = Math.min(yTop, yBottom);
 
-        ctx.fillStyle = s.touches >= 2 ? 'rgba(14, 203, 129, 0.09)' : 'rgba(14, 203, 129, 0.05)';
+        const isWeakening = s.status === 'weakening';
+        const opacity = fillOpacity(s.strength_score);
+
+        // Fill - Green
+        ctx.fillStyle = `rgba(14, 203, 129, ${opacity})`;
         ctx.fillRect(xStart, minY, boxWidth, boxHeight);
 
-        ctx.strokeStyle = s.touches >= 2 ? 'rgba(14, 203, 129, 0.65)' : 'rgba(14, 203, 129, 0.35)';
+        // Border - Green
+        const borderAlpha = s.touches >= 3 ? 0.75 : 0.45;
+        ctx.strokeStyle = `rgba(14, 203, 129, ${borderAlpha})`;
+        ctx.setLineDash([]);
         ctx.lineWidth = 1;
-
         ctx.beginPath();
         ctx.moveTo(xStart, minY);
         ctx.lineTo(maxRightX, minY);
@@ -327,8 +353,11 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
 
-        const badgeText = `ПІДТРИМКА ${s.touches > 1 ? `x${s.touches} ` : ''}[${s.bottom} - ${s.top}]`;
-        drawBadge(ctx, badgeText, xStart + 12, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'left');
+        // Badge text: clean ПІДТРИМКА with touches and score anchored cleanly at the right edge
+        const sc = s.strength_score !== undefined ? Math.round(s.strength_score) : undefined;
+        const retestPart = s.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
+        const badgeText = `ПІДТРИМКА x${s.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'right');
       });
     }
   }

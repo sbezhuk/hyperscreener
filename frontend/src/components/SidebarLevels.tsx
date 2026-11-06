@@ -147,6 +147,32 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 <span title={`Діапазон зони: ${r.bottom} - ${r.top}`}>
                   Опір {r.price} {r.touches > 1 ? <span className="text-gray-500">x{r.touches}</span> : ''}
                 </span>
+                {/* strength_score progress bar */}
+                {r.strength_score !== undefined && (
+                  <span className="flex items-center gap-1 ml-1">
+                    <span
+                      className="inline-block h-1.5 rounded-full bg-[#f6465d]/60"
+                      style={{ width: `${Math.round(r.strength_score / 100 * 32)}px`, minWidth: '2px' }}
+                    />
+                    <span className="text-[9px] text-gray-500">{Math.round(r.strength_score)}</span>
+                  </span>
+                )}
+                {/* status badge (skip 'active') */}
+                {r.status && r.status !== 'active' && (
+                  <span
+                    className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                      r.status === 'retested'
+                        ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-yellow-500/15 text-yellow-400'
+                    }`}
+                  >
+                    {r.status === 'retested' ? 'Дзеркальний' : 'Ослаблений'}
+                  </span>
+                )}
+                {/* average bounce */}
+                {r.average_bounce_atr !== undefined && r.average_bounce_atr > 0 && (
+                  <span className="text-[9px] text-gray-500">~{r.average_bounce_atr.toFixed(1)}ATR</span>
+                )}
               </div>
               <span className="text-[#f6465d] font-semibold">
                 {r.distPct >= 0 ? `+${r.distPct.toFixed(2)}%` : `${r.distPct.toFixed(2)}%`}
@@ -165,6 +191,32 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 <span title={`Діапазон зони: ${s.bottom} - ${s.top}`}>
                   Підтримка {s.price} {s.touches > 1 ? <span className="text-gray-500">x{s.touches}</span> : ''}
                 </span>
+                {/* strength_score progress bar */}
+                {s.strength_score !== undefined && (
+                  <span className="flex items-center gap-1 ml-1">
+                    <span
+                      className="inline-block h-1.5 rounded-full bg-[#0ecb81]/60"
+                      style={{ width: `${Math.round(s.strength_score / 100 * 32)}px`, minWidth: '2px' }}
+                    />
+                    <span className="text-[9px] text-gray-500">{Math.round(s.strength_score)}</span>
+                  </span>
+                )}
+                {/* status badge (skip 'active') */}
+                {s.status && s.status !== 'active' && (
+                  <span
+                    className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                      s.status === 'retested'
+                        ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-yellow-500/15 text-yellow-400'
+                    }`}
+                  >
+                    {s.status === 'retested' ? 'Дзеркальний' : 'Ослаблений'}
+                  </span>
+                )}
+                {/* average bounce */}
+                {s.average_bounce_atr !== undefined && s.average_bounce_atr > 0 && (
+                  <span className="text-[9px] text-gray-500">~{s.average_bounce_atr.toFixed(1)}ATR</span>
+                )}
               </div>
               <span className="text-[#0ecb81] font-semibold">
                 {s.distPct.toFixed(2)}%

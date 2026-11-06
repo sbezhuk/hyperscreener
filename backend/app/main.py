@@ -1,10 +1,12 @@
 import asyncio
 import json
+import time
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
 from .hyperliquid import hl_client
+from .ws_manager import hl_ws_manager
 from .analyzer.screener import analyze_coin_data, scan_market
 
 app = FastAPI(title="Hyperliquid Screener API", version="1.0.0")
@@ -18,11 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Active WebSocket connections
-active_websockets: List[WebSocket] = []
+@app.on_event("startup")
+async def startup_event():
+    # Start direct Hyperliquid WebSocket manager in the background
+    await hl_ws_manager.start()
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    await hl_ws_manager.stop()
     await hl_client.close()
 
 @app.get("/api/coins")
@@ -74,13 +79,43 @@ async def get_screener_signals(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    active_websockets.append(websocket)
+    await hl_ws_manager.register_client(websocket)
     try:
+        # Send initial status
+        await websocket.send_json({
+            "type": "ws_status",
+            "status": "connected" if hl_ws_manager.is_connected else "connecting",
+            "timestamp": time.time()
+        })
+
         while True:
-            # Keep-alive or handle client messages
-            msg = await websocket.receive_text()
+            text = await websocket.receive_text()
+            try:
+                msg = json.loads(text)
+            except Exception:
+                continue
+
+            action = msg.get("action") or msg.get("type")
+            coin = msg.get("coin", "ETH")
+            interval = msg.get("interval", "1d")
+
+            if action in ["subscribe", "sub"]:
+                await hl_ws_manager.subscribe_client(websocket, coin, interval)
+                await websocket.send_json({
+                    "type": "subscribed",
+                    "coin": coin.upper(),
+                    "interval": interval.lower()
+                })
+            elif action in ["unsubscribe", "unsub"]:
+                await hl_ws_manager.unsubscribe_client(websocket, coin, interval)
+                await websocket.send_json({
+                    "type": "unsubscribed",
+                    "coin": coin.upper(),
+                    "interval": interval.lower()
+                })
+            elif action == "ping":
+                await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
-        active_websockets.remove(websocket)
+        await hl_ws_manager.unregister_client(websocket)
     except Exception:
-        if websocket in active_websockets:
-            active_websockets.remove(websocket)
+        await hl_ws_manager.unregister_client(websocket)
