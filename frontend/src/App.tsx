@@ -5,7 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
-import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem } from './types';
+import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem } from './types';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
@@ -310,6 +310,32 @@ export function App() {
     };
   }, [analysis, selectedTfs, minStrength]);
 
+  // Compute filtered FVGs across selected timeframes
+  const filteredFvgs = React.useMemo(() => {
+    if (!analysis) return [];
+
+    let candidates: FVGItem[] = [];
+
+    if (analysis.multiTimeframeFvgs && Object.keys(analysis.multiTimeframeFvgs).length > 0) {
+      selectedTfs.forEach((tf) => {
+        const tfClean = tf.toLowerCase();
+        const list = analysis.multiTimeframeFvgs?.[tfClean] || [];
+        candidates = candidates.concat(list);
+      });
+    } else {
+      candidates = analysis.fvgs || [];
+    }
+
+    return candidates.filter((f) => {
+      // Exclude fully mitigated or invalid ones, keeping active bullish and bearish FVGs
+      const status = f.mitigation_status || (f.status === 'mitigated' ? 'FULLY MITIGATED' : 'FRESH');
+      if (status === 'FULLY MITIGATED') return false;
+
+      const score = f.strength_score ?? 70;
+      return score >= minStrength;
+    });
+  }, [analysis, selectedTfs, minStrength]);
+
   const handleToggleTf = (tf: string) => {
     setSelectedTfs((prev) =>
       prev.includes(tf) ? prev.filter((t) => t !== tf) : [...prev, tf]
@@ -354,7 +380,7 @@ export function App() {
               candles={analysis.candles}
               resistances={filteredResistances}
               supports={filteredSupports}
-              fvgs={analysis.fvgs}
+              fvgs={filteredFvgs}
               signals={analysis.signals}
               liquidity={analysis.liquidity}
               activeFormation={activeFormation}

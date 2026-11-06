@@ -5,6 +5,7 @@ from ..ws_manager import hl_ws_manager
 from .levels import analyze_levels
 from .mtf_levels import mtf_levels_manager
 from .fvg import detect_fvgs
+from .mtf_fvg import mtf_fvg_manager
 from .liquidity import detect_liquidity_and_sweeps
 from .structure import analyze_market_structure
 
@@ -55,9 +56,20 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -
         "cascades": cascades,
     }
 
-    fvgs = detect_fvgs(candles, interval=interval)
-    liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval)
     structure_data = analyze_market_structure(candles)
+    liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval)
+
+    # 3. Independent Multi-Timeframe FVG Engine
+    mtf_fvg_results = await mtf_fvg_manager.get_all_timeframe_fvgs(
+        coin=coin,
+        active_interval=interval,
+        active_candles=candles,
+        trend=structure_data.get("trend", "NEUTRAL"),
+        structure_events=structure_data.get("events", [])
+    )
+    fvgs = mtf_fvg_results.get("active_fvgs", [])
+    all_timeframe_fvgs = mtf_fvg_results.get("all_timeframes", {})
+    fvg_confluences = mtf_fvg_results.get("confluences", [])
 
     # Compile formations / signals
     signals = []
@@ -138,19 +150,21 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -
 
     # 5. FVG (category: "fvg")
     for fvg in fvgs:
-        dist_to_gap = abs(current_price - fvg["mid"]) / current_price * 100
-        if dist_to_gap < 2.0:
+        dist_to_gap = abs(current_price - fvg["midpoint_price"]) / current_price * 100
+        if dist_to_gap < 3.0 and fvg.get("mitigation_status") != "FULLY MITIGATED":
+            is_ifvg = fvg.get("mitigation_status") == "INVERTED"
+            f_title = f"{'IFVG' if is_ifvg else 'FVG'} ({'Бичачий' if fvg['type'] == 'BULLISH' else 'Ведмежий'}) [{fvg.get('strength_score', 0)}pts]"
             signals.append({
-                "id": f"fvg-{fvg['startTime']}-{fvg['type']}",
+                "id": f"fvg-{fvg['creation_timestamp']}-{fvg['type']}-{fvg.get('mitigation_status')}",
                 "coin": coin,
                 "interval": interval,
                 "category": "fvg",
-                "title": f"FVG ({'Бичачий' if fvg['type'] == 'bullish' else 'Ведмежий'})",
-                "direction": "LONG" if fvg["type"] == "bullish" else "SHORT",
-                "desc": f"Зона дисбалансу [{fvg['bottom']:.4f} - {fvg['top']:.4f}] ({fvg['status']})",
-                "price": fvg["mid"],
+                "title": f_title,
+                "direction": "LONG" if fvg["type"] == "BULLISH" else "SHORT",
+                "desc": f"Зона [{fvg['lower_price']:.4f} - {fvg['upper_price']:.4f}] ({fvg['mitigation_status']}, {fvg.get('mitigation_percent', 0)}% заповн.)",
+                "price": fvg["midpoint_price"],
                 "distPct": round(dist_to_gap, 2),
-                "time": fvg["startTime"]
+                "time": fvg["creation_timestamp"]
             })
 
     # Register active levels with WS manager for millisecond-level live sweep detection
@@ -169,6 +183,8 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -
         "levels": levels_data,
         "multiTimeframeLevels": mtf_levels,
         "fvgs": fvgs,
+        "multiTimeframeFvgs": all_timeframe_fvgs,
+        "fvgConfluences": fvg_confluences,
         "liquidity": liquidity_data,
         "structure": structure_data,
         "signals": signals

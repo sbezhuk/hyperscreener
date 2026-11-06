@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, LineStyle, SeriesMarker } from 'lightweight-charts';
-import { Candle, LevelItem, FVGItem, SignalItem, FormationFilter, AnalysisData } from '../types';
+import { Candle, LevelItem, FVGItem, FVGConfluenceItem, SignalItem, FormationFilter, AnalysisData } from '../types';
 import { ZonesPrimitive } from './ZonesPrimitive';
 
 interface ChartProps {
@@ -196,7 +196,7 @@ export const Chart: React.FC<ChartProps> = ({
     priceLinesRef.current.forEach((line) => {
       try {
         candleSeriesRef.current?.removePriceLine(line);
-      } catch (e) {}
+      } catch (e) { }
     });
     priceLinesRef.current = [];
 

@@ -5,12 +5,13 @@ import {
   ISeriesPrimitivePaneRenderer,
   Time,
 } from 'lightweight-charts';
-import { LevelItem, FVGItem, FormationFilter } from '../types';
+import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter } from '../types';
 
 export interface ZonesPrimitiveData {
   resistances?: LevelItem[];
   supports?: LevelItem[];
   fvgs?: FVGItem[];
+  fvgConfluences?: FVGConfluenceItem[];
   trendlines?: Array<{
     type: string;
     label: string;
@@ -124,6 +125,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       resistances: data.resistances || [],
       supports: data.supports || [],
       fvgs: data.fvgs || [],
+      fvgConfluences: data.fvgConfluences || [],
       trendlines: data.trendlines || [],
       sweeps: data.sweeps || [],
     };
@@ -150,25 +152,29 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
     const candleSeries = this._series;
     const maxRightX = width - 4;
 
-    // 1. Draw Clean FVG Zones
+    // 1. Draw Clean FVG Zones (Only Bullish and Bearish FVGs)
     if (activeFormation === 'FVG') {
       fvgs.forEach((f) => {
-        const yTop = candleSeries.priceToCoordinate(f.top);
-        const yBottom = candleSeries.priceToCoordinate(f.bottom);
+        const topPrice = f.upper_price ?? f.top;
+        const bottomPrice = f.lower_price ?? f.bottom;
+
+        const yTop = candleSeries.priceToCoordinate(topPrice);
+        const yBottom = candleSeries.priceToCoordinate(bottomPrice);
         if (yTop === null || yBottom === null) return;
 
-        let xStart = timeScale.timeToCoordinate(f.startTime as any);
+        const fvgStartTime = f.creation_timestamp ?? f.startTime;
+        let xStart = timeScale.timeToCoordinate(fvgStartTime as any);
         if (xStart === null || xStart < 0) xStart = 0;
 
-        const boxWidth = Math.max(maxRightX - xStart, 20);
+        const boxWidth = Math.max(maxRightX - xStart, 25);
         const boxHeight = Math.max(Math.abs(yBottom - yTop), 4);
         const minY = Math.min(yTop, yBottom);
 
-        const isBull = f.type === 'bullish';
-        const fillCol = isBull ? 'rgba(14, 203, 129, 0.12)' : 'rgba(246, 70, 93, 0.12)';
-        const borderCol = isBull ? 'rgba(14, 203, 129, 0.65)' : 'rgba(246, 70, 93, 0.65)';
+        const isBull = f.type.toLowerCase() === 'bullish';
+        const fillCol = isBull ? 'rgba(14, 203, 129, 0.14)' : 'rgba(246, 70, 93, 0.14)';
+        const borderCol = isBull ? 'rgba(14, 203, 129, 0.75)' : 'rgba(246, 70, 93, 0.75)';
 
-        // Clean rectangle
+        // Zone rectangle
         ctx.fillStyle = fillCol;
         ctx.fillRect(xStart, minY, boxWidth, boxHeight);
 
@@ -178,8 +184,8 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.strokeRect(xStart, minY, boxWidth, boxHeight);
         ctx.setLineDash([]);
 
-        // Badge anchored cleanly at the right
-        const badgeText = `${isBull ? '▲ BULL' : '▼ BEAR'} FVG`;
+        // Badge: Bullish / Bearish FVG
+        const badgeText = isBull ? '▲ BULL FVG' : '▼ BEAR FVG';
         drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, borderCol, 'right');
       });
       return;

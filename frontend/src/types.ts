@@ -38,14 +38,56 @@ export interface LevelItem {
 }
 
 export interface FVGItem {
-  type: 'bullish' | 'bearish';
+  fvg_id?: string;
+  symbol?: string;
+  timeframe?: string;
+  type: 'bullish' | 'bearish' | 'BULLISH' | 'BEARISH';
+  upper_price?: number;
+  lower_price?: number;
+  midpoint_price?: number;
+  gap_size?: number;
+  gap_size_atr?: number;
+  strength_score?: number;
+  strength_category?: 'Weak' | 'Moderate' | 'Strong' | 'Very Strong';
+  mitigation_percent?: number;
+  wick_penetration_percent?: number;
+  close_penetration_percent?: number;
+  mitigation_status?: 'FRESH' | 'PARTIALLY MITIGATED' | '50% MITIGATED' | 'FULLY MITIGATED' | 'INVERTED' | 'INVALIDATED';
+  inversion_status?: string;
+  inversion_timestamp?: number;
+  inversion_price?: number;
+  ifvg_type?: string;
+  creation_timestamp?: number;
+  last_tested_timestamp?: number;
+  ce_reached?: boolean;
+  ce_first_time?: number;
+  ce_close_after?: number;
+  first_candle_id?: number;
+  impulse_candle_id?: number;
+  third_candle_id?: number;
+  volume_confirmation?: boolean;
+  market_structure_confirmation?: boolean;
+  // Compatibility fields
   top: number;
   bottom: number;
   mid: number;
   gapPct: number;
   startTime: number;
   endTime: number;
-  status: 'mitigated' | 'unmitigated';
+  status: 'mitigated' | 'unmitigated' | string;
+}
+
+export interface FVGConfluenceItem {
+  confluence_id: string;
+  type: 'BULLISH' | 'BEARISH' | string;
+  upper_price: number;
+  lower_price: number;
+  midpoint_price: number;
+  timeframes: string[];
+  timeframe_count: number;
+  confluence_score: number;
+  fvg_ids: string[];
+  desc: string;
 }
 
 export interface SignalItem {
@@ -79,6 +121,8 @@ export interface AnalysisData {
   };
   multiTimeframeLevels?: Record<string, { resistances: LevelItem[]; supports: LevelItem[] }>;
   fvgs: FVGItem[];
+  multiTimeframeFvgs?: Record<string, FVGItem[]>;
+  fvgConfluences?: FVGConfluenceItem[];
   liquidity: {
     pools: Array<{
       type: string;
