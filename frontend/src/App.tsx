@@ -127,11 +127,18 @@ export function App() {
               ) {
                 return prev;
               }
-              if (prev && prev.coin === coinToFetch && prev.interval === cleanTf && prev.levels) {
-                return prev; // Full analysis already arrived
+              // If full analysis already arrived (not a fast-path stub), don't overwrite it
+              if (
+                prev &&
+                prev.coin?.toUpperCase() === coinToFetch.toUpperCase() &&
+                prev.interval?.toLowerCase() === cleanTf &&
+                !prev.isFastPath
+              ) {
+                return prev;
               }
               const lastCandle = candleData.candles[candleData.candles.length - 1];
               return {
+                isFastPath: true,
                 coin: coinToFetch,
                 interval: cleanTf,
                 currentPrice: lastCandle.close,
@@ -299,7 +306,8 @@ export function App() {
 
             if (data.coin?.toUpperCase() === currentCoin && data.interval?.toLowerCase() === currentTf) {
               setAnalysis((prev) => {
-                if (!prev) return prev;
+                // Do not apply live tick if historical analysis or candles have not loaded yet!
+                if (!prev || !prev.candles || prev.candles.length === 0) return prev;
                 // Guard: Do not apply tick to stale coin or timeframe
                 if (
                   prev.coin?.toUpperCase() !== currentCoin ||
@@ -311,14 +319,10 @@ export function App() {
                 const updatedCandles = [...prev.candles];
                 const newCandle = data.candle;
 
-                if (updatedCandles.length > 0) {
-                  const lastIdx = updatedCandles.length - 1;
-                  if (updatedCandles[lastIdx].time === newCandle.time) {
-                    updatedCandles[lastIdx] = newCandle;
-                  } else if (newCandle.time > updatedCandles[lastIdx].time) {
-                    updatedCandles.push(newCandle);
-                  }
-                } else {
+                const lastIdx = updatedCandles.length - 1;
+                if (updatedCandles[lastIdx].time === newCandle.time) {
+                  updatedCandles[lastIdx] = newCandle;
+                } else if (newCandle.time > updatedCandles[lastIdx].time) {
                   updatedCandles.push(newCandle);
                 }
 

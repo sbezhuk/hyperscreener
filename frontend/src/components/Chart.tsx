@@ -46,12 +46,15 @@ export const Chart: React.FC<ChartProps> = ({
   isLoadingEarlierRef.current = isLoadingEarlier;
 
   const prevContextRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
+  // Track user interaction (drag / scroll) so pagination only triggers on deliberate scrolling into the past
+  const userHasScrolledHistoryRef = useRef<boolean>(false);
 
   // 1. Initialize Chart & Attach ZonesPrimitive directly to Candle Series
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
+      autoSize: true,
       layout: {
         background: { color: isDark ? '#0b0e11' : '#ffffff' },
         textColor: isDark ? '#848e9c' : '#475569',
@@ -112,7 +115,12 @@ export const Chart: React.FC<ChartProps> = ({
       if (isLoadingEarlierRef.current) return;
 
       const barsInfo = candleSeriesRef.current.barsInLogicalRange(newRange);
-      if (barsInfo && barsInfo.barsBefore < 40) {
+      // Trigger pagination only when user explicitly scrolled back towards older history
+      if (barsInfo && barsInfo.barsAfter > 30) {
+        userHasScrolledHistoryRef.current = true;
+      }
+
+      if (userHasScrolledHistoryRef.current && barsInfo && barsInfo.barsBefore < 40) {
         onLoadEarlierRef.current();
       }
     };
@@ -225,13 +233,24 @@ export const Chart: React.FC<ChartProps> = ({
         console.warn('Safely caught initial setData error:', err);
       }
       initializedRef.current = true;
+      userHasScrolledHistoryRef.current = false;
 
       const totalBars = mappedCandles.length;
+      // Set visible range showing recent ~100 bars and right offset space for "Now"
       chartRef.current.timeScale().setVisibleLogicalRange({
         from: Math.max(0, totalBars - 100),
         to: totalBars + 12,
       });
-      chartRef.current.timeScale().scrollToRealTime();
+
+      // Re-affirm range on next animation frame in case container flexbox layout was settling on initial mount
+      requestAnimationFrame(() => {
+        if (chartRef.current && !userHasScrolledHistoryRef.current) {
+          chartRef.current.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, totalBars - 100),
+            to: totalBars + 12,
+          });
+        }
+      });
 
       prevContextRef.current = { coin, interval: interval || '' };
     } else {
@@ -343,7 +362,7 @@ export const Chart: React.FC<ChartProps> = ({
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#0b0e11] dark:bg-[#0b0e11] bg-white overflow-hidden transition-colors">
-      <div ref={chartContainerRef} className="w-full flex-1" />
+      <div ref={chartContainerRef} className="w-full flex-1 min-h-0 min-w-0" />
 
       {/* Top indicator for loading earlier history */}
       {isLoadingEarlier && (

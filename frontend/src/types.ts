@@ -104,6 +104,7 @@ export interface SignalItem {
 }
 
 export interface AnalysisData {
+  isFastPath?: boolean;
   coin: string;
   interval: string;
   currentPrice: number;
