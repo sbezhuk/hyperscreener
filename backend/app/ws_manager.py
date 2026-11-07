@@ -7,6 +7,11 @@ import websockets
 from fastapi import WebSocket
 
 from .hyperliquid import hl_client
+from .reconnect_manager import (
+    ReconnectManager,
+    BackoffConfig,
+    ConnectionState
+)
 
 logger = logging.getLogger("hyperscreener.ws")
 logging.basicConfig(level=logging.INFO)
@@ -19,15 +24,34 @@ class HyperliquidWSManager:
     Direct WebSocket connection manager for Hyperliquid (wss://api.hyperliquid.xyz/ws)
     Features:
     - Point 1.1: Direct streaming of candle and allMids real-time tick data.
-    - Point 1.2: Automatic reconnection manager with exponential backoff & ping keepalive.
+    - Point 1.2: Robust Auto-Reconnection Manager with Exponential Backoff (1s -> 2x -> 60s max) + Jitter,
+                 heartbeat watchdog, non-blocking async loops, single-flight guard, and manual override.
     - Point 1.3: Real-time on-the-fly sweep detection when candle touches/pierces levels.
     """
 
     def __init__(self):
         self._running = False
         self._ws_task: Optional[asyncio.Task] = None
-        self._ping_task: Optional[asyncio.Task] = None
+        self._watchdog_task: Optional[asyncio.Task] = None
         self._hl_ws = None
+        self._last_received_time: float = 0.0
+        self._heartbeat_interval: float = 20.0
+        self._heartbeat_timeout: float = 45.0
+        self._connection_lock = asyncio.Lock()
+
+        # Reconnect Manager with strict exponential backoff parameters:
+        # Base: 1.0s, multiplier: 2.0x, max: 60.0s, jitter: 0.25
+        self.reconnect_mgr = ReconnectManager(
+            name="HyperliquidWS",
+            config=BackoffConfig(
+                initial_interval=1.0,
+                multiplier=2.0,
+                max_interval=60.0,
+                jitter_ratio=0.25,
+                max_consecutive_failures=15
+            ),
+            on_state_change=self._on_connection_state_change
+        )
 
         # Frontend client connections
         self._active_clients: Set[WebSocket] = set()
@@ -44,33 +68,69 @@ class HyperliquidWSManager:
         # Avoid duplicate sweep notifications for identical (level, candle_time, direction)
         self._seen_live_sweeps: Set[str] = set()
 
-        # Backoff parameters
-        self._min_backoff = 1.0
-        self._max_backoff = 16.0
-        self._current_backoff = 1.0
-        self.is_connected = False
+    @property
+    def is_connected(self) -> bool:
+        return self.reconnect_mgr.is_connected
+
+    @property
+    def state(self) -> ConnectionState:
+        return self.reconnect_mgr.state
 
     async def start(self):
-        """Starts background task to manage Hyperliquid WS connection."""
-        if self._running:
+        """Starts background task to manage Hyperliquid WS connection with single-flight guard."""
+        if self._running and self._ws_task and not self._ws_task.done():
+            logger.debug("Hyperliquid WS manager is already running.")
             return
+
         self._running = True
         self._ws_task = asyncio.create_task(self._connection_loop())
 
     async def stop(self):
-        """Stops background tasks and closes connection."""
+        """Stops background tasks and closes connection cleanly."""
         self._running = False
-        if self._ping_task and not self._ping_task.done():
-            self._ping_task.cancel()
+        await self._cleanup_connection()
         if self._ws_task and not self._ws_task.done():
             self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                pass
+        self._ws_task = None
+        await self.reconnect_mgr.manual_disconnect(reason="Service shutdown")
+
+    async def manual_disconnect(self):
+        """User-initiated manual disconnect. Halts automatic reconnection attempts."""
+        logger.info("Manual disconnect requested by user.")
+        await self.reconnect_mgr.manual_disconnect(reason="Manual disconnect by user")
+        await self._cleanup_connection()
+
+    async def manual_reconnect(self):
+        """User-initiated manual reconnect. Resets backoff counter and reconnects immediately."""
+        logger.info("Manual reconnect requested by user.")
+        await self.reconnect_mgr.manual_reconnect()
+        # If connection loop is not active or awaiting retry, wake it or restart it
+        if not self._running or self._ws_task is None or self._ws_task.done():
+            self._running = True
+            self._ws_task = asyncio.create_task(self._connection_loop())
+        else:
+            self.reconnect_mgr.trigger_wake()
+
+    async def _cleanup_connection(self):
+        """Cancels heartbeat watchdog and closes active websocket session."""
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
+            except asyncio.CancelledError:
+                pass
+        self._watchdog_task = None
+
         if self._hl_ws:
             try:
                 await self._hl_ws.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error during WS close: {e}")
         self._hl_ws = None
-        self.is_connected = False
 
     def update_levels(self, coin: str, interval: str, resistances: List[Dict[str, Any]], supports: List[Dict[str, Any]]):
         """Updates levels used for instantaneous sweep detection."""
@@ -159,73 +219,141 @@ class HyperliquidWSManager:
     # Hyperliquid WebSocket Connection Loop (Auto-Reconnect)
     # -------------------------------------------------------------
     async def _connection_loop(self):
-        """Continuously maintains connection to Hyperliquid WS with exponential backoff."""
-        while self._running:
-            try:
-                logger.info(f"Connecting to Hyperliquid WebSocket: {HYPERLIQUID_WS_URL} ...")
-                async with websockets.connect(
-                    HYPERLIQUID_WS_URL,
-                    ping_interval=None, # we manage custom ping
-                    close_timeout=5,
-                    max_size=10_000_000
-                ) as ws:
-                    self._hl_ws = ws
-                    self.is_connected = True
-                    self._current_backoff = self._min_backoff
-                    logger.info("✅ Connected to Hyperliquid WebSocket successfully!")
+        """
+        Continuously maintains connection to Hyperliquid WS with exponential backoff & jitter.
+        Ensures non-blocking execution, single-flight protection, and clean lifecycle management.
+        """
+        async with self._connection_lock:
+            while self._running:
+                # If manual disconnect was triggered, sleep until manual reconnect or shutdown
+                if self.reconnect_mgr.is_manual_disconnect:
+                    logger.info("Connection loop idle due to manual disconnect. Waiting for user action...")
+                    await self.reconnect_mgr.wait_before_retry(3600.0)
+                    continue
 
-                    # Broadcast connected status to clients
-                    await self._broadcast_status("connected")
+                connect_start_time = time.time()
+                try:
+                    logger.info(f"Connecting to Hyperliquid WebSocket: {HYPERLIQUID_WS_URL} ...")
+                    async with websockets.connect(
+                        HYPERLIQUID_WS_URL,
+                        ping_interval=None,  # We run custom Hyperliquid application-level heartbeat
+                        close_timeout=5,
+                        max_size=10_000_000
+                    ) as ws:
+                        self._hl_ws = ws
+                        self._last_received_time = time.time()
+                        await self.reconnect_mgr.on_connected()
 
-                    # Re-subscribe to all active topics
-                    for coin, interval in list(self._subscribed_topics):
-                        sub_msg = {
-                            "method": "subscribe",
-                            "subscription": {
-                                "type": "candle",
-                                "coin": coin,
-                                "interval": interval
+                        # Re-subscribe to all active topics without duplication
+                        for coin, interval in list(self._subscribed_topics):
+                            sub_msg = {
+                                "method": "subscribe",
+                                "subscription": {
+                                    "type": "candle",
+                                    "coin": coin,
+                                    "interval": interval
+                                }
                             }
-                        }
-                        await ws.send(json.dumps(sub_msg))
+                            await ws.send(json.dumps(sub_msg))
+                            logger.info(f"Restored subscription: {coin} {interval}")
 
-                    # Start ping keepalive
-                    if self._ping_task and not self._ping_task.done():
-                        self._ping_task.cancel()
-                    self._ping_task = asyncio.create_task(self._ping_loop(ws))
+                        # Start heartbeat watchdog (pings every 20s, checks silent timeout at 45s)
+                        if self._watchdog_task and not self._watchdog_task.done():
+                            self._watchdog_task.cancel()
+                        self._watchdog_task = asyncio.create_task(self._heartbeat_watchdog(ws))
 
-                    # Receive messages
-                    async for raw_msg in ws:
-                        if not self._running:
-                            break
-                        await self._handle_hl_message(raw_msg)
+                        # Receive incoming messages from Hyperliquid
+                        async for raw_msg in ws:
+                            if not self._running or self.reconnect_mgr.is_manual_disconnect:
+                                break
+                            self._last_received_time = time.time()
+                            await self._handle_hl_message(raw_msg)
 
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.is_connected = False
-                self._hl_ws = None
-                await self._broadcast_status("reconnecting")
-                logger.warning(
-                    f"⚠️ Hyperliquid WS disconnected ({e}). Reconnecting in {self._current_backoff:.1f}s..."
-                )
-                await asyncio.sleep(self._current_backoff)
-                self._current_backoff = min(self._current_backoff * 2, self._max_backoff)
+                except asyncio.CancelledError:
+                    logger.info("Connection task cancelled.")
+                    break
+                except Exception as e:
+                    # Record disconnect and determine whether it was manual
+                    session_duration = round(time.time() - connect_start_time, 2)
+                    error_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                    await self.reconnect_mgr.on_disconnected(
+                        reason=f"Session closed after {session_duration}s ({error_msg})",
+                        error=e
+                    )
+                finally:
+                    await self._cleanup_connection()
 
-        self.is_connected = False
+                if not self._running:
+                    break
+
+                if self.reconnect_mgr.is_manual_disconnect:
+                    continue
+
+                # Prepare exponential backoff with randomized jitter
+                delay = await self.reconnect_mgr.prepare_next_retry()
+                logger.info(f"Waiting {delay:.2f}s before next reconnection attempt...")
+
+                # Non-blocking cancelable wait
+                await self.reconnect_mgr.wait_before_retry(delay)
+
         self._hl_ws = None
 
-    async def _ping_loop(self, ws):
-        """Sends Hyperliquid ping every 30 seconds to keep connection fresh."""
+    async def _heartbeat_watchdog(self, ws):
+        """
+        Periodically sends Hyperliquid heartbeat ping and detects silent TCP half-open freezes.
+        If no pong or message is received within `_heartbeat_timeout`, terminates connection.
+        """
         try:
-            while self._running and self.is_connected:
-                await asyncio.sleep(30)
-                await ws.send(json.dumps({"method": "ping"}))
+            while self._running and self.is_connected and not self.reconnect_mgr.is_manual_disconnect:
+                await asyncio.sleep(self._heartbeat_interval)
+                # Send ping
+                try:
+                    await ws.send(json.dumps({"method": "ping"}))
+                except Exception as e:
+                    logger.warning(f"Failed to send ping keepalive: {e}")
+                    break
+
+                # Watchdog check for stale connection (no message or pong received)
+                now = time.time()
+                time_since_last_msg = now - self._last_received_time
+                if time_since_last_msg > self._heartbeat_timeout:
+                    logger.warning(
+                        f"⚠️ Heartbeat timeout: No message or pong from Hyperliquid for {time_since_last_msg:.1f}s. "
+                        f"Closing stale connection to initiate auto-reconnection."
+                    )
+                    await ws.close()
+                    break
         except (asyncio.CancelledError, Exception):
             pass
 
-    async def _broadcast_status(self, status: str):
-        msg = json.dumps({"type": "ws_status", "status": status, "timestamp": time.time()})
+    async def _on_connection_state_change(self, state: ConnectionState, details: Dict[str, Any]):
+        """Callback from ReconnectManager: broadcasts status update to all connected frontend clients."""
+        await self._broadcast_status(
+            status=state,
+            attempt=details.get("attempt", self.reconnect_mgr.consecutive_failures),
+            delay=details.get("delay", 0.0),
+            reason=details.get("reason", ""),
+            is_manual=details.get("manual", self.reconnect_mgr.is_manual_disconnect)
+        )
+
+    async def _broadcast_status(
+        self,
+        status: ConnectionState,
+        attempt: int = 0,
+        delay: float = 0.0,
+        reason: str = "",
+        is_manual: bool = False
+    ):
+        msg = json.dumps({
+            "type": "ws_status",
+            "status": status.value if hasattr(status, "value") else str(status),
+            "attempt": attempt,
+            "next_retry_delay": round(delay, 2),
+            "reason": reason,
+            "is_manual": is_manual,
+            "timestamp": time.time(),
+            "diagnostics": self.reconnect_mgr.get_diagnostics()
+        })
         dead_clients = []
         for client in list(self._active_clients):
             try:
@@ -246,6 +374,7 @@ class HyperliquidWSManager:
 
         channel = data.get("channel")
         if channel == "pong":
+            # Successfully received heartbeat response from Hyperliquid
             return
 
         if channel == "candle":
@@ -331,10 +460,7 @@ class HyperliquidWSManager:
         prev_c = self._prev_candles.get((coin, interval))
         # Update prev_candles on candle time transition
         if prev_c is None or prev_c["time"] < c_time:
-            # We just rolled over or started
-            if prev_c is not None and prev_c["time"] < c_time:
-                # prev_c is now definitely closed!
-                pass
+            pass
 
         # Check resistance false breakout / sweeps (Bearish Sweeps -> Short)
         for r in resistances:

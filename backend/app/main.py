@@ -84,16 +84,52 @@ async def get_screener_signals(
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/api/ws/status")
+async def get_ws_status():
+    """Returns current exchange WebSocket connection state, diagnostics, and active topics."""
+    return {
+        "success": True,
+        "state": hl_ws_manager.state.value,
+        "is_connected": hl_ws_manager.is_connected,
+        "diagnostics": hl_ws_manager.reconnect_mgr.get_diagnostics(),
+        "subscribed_topics": [
+            {"coin": coin, "interval": interval}
+            for coin, interval in hl_ws_manager._subscribed_topics
+        ],
+        "active_clients_count": len(hl_ws_manager._active_clients)
+    }
+
+@app.post("/api/ws/disconnect")
+async def manual_ws_disconnect():
+    """Manually disconnects exchange WebSocket and halts auto-reconnection."""
+    await hl_ws_manager.manual_disconnect()
+    return {
+        "success": True,
+        "message": "Manual disconnect initiated. Auto-reconnection paused.",
+        "state": hl_ws_manager.state.value
+    }
+
+@app.post("/api/ws/reconnect")
+async def manual_ws_reconnect():
+    """Manually reconnects exchange WebSocket and resumes auto-reconnection with reset backoff."""
+    await hl_ws_manager.manual_reconnect()
+    return {
+        "success": True,
+        "message": "Manual reconnect initiated.",
+        "state": hl_ws_manager.state.value
+    }
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     await hl_ws_manager.register_client(websocket)
     try:
-        # Send initial status
+        # Send initial status with full diagnostics
         await websocket.send_json({
             "type": "ws_status",
-            "status": "connected" if hl_ws_manager.is_connected else "connecting",
-            "timestamp": time.time()
+            "status": hl_ws_manager.state.value,
+            "timestamp": time.time(),
+            "diagnostics": hl_ws_manager.reconnect_mgr.get_diagnostics()
         })
 
         while True:
@@ -120,6 +156,26 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "unsubscribed",
                     "coin": coin.upper(),
                     "interval": interval.lower()
+                })
+            elif action == "disconnect":
+                await hl_ws_manager.manual_disconnect()
+                await websocket.send_json({
+                    "type": "ws_status",
+                    "status": hl_ws_manager.state.value,
+                    "is_manual": True
+                })
+            elif action == "reconnect":
+                await hl_ws_manager.manual_reconnect()
+                await websocket.send_json({
+                    "type": "ws_status",
+                    "status": hl_ws_manager.state.value,
+                    "is_manual": False
+                })
+            elif action == "status":
+                await websocket.send_json({
+                    "type": "ws_status",
+                    "status": hl_ws_manager.state.value,
+                    "diagnostics": hl_ws_manager.reconnect_mgr.get_diagnostics()
                 })
             elif action == "ping":
                 await websocket.send_json({"type": "pong"})

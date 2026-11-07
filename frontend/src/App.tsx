@@ -5,7 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
-import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle } from './types';
+import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle, ConnectionState, WSConnectionDetails } from './types';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
@@ -27,7 +27,10 @@ export function App() {
   const [isLoadingEarlier, setIsLoadingEarlier] = useState<boolean>(false);
   const [isScreenerLoading, setIsScreenerLoading] = useState<boolean>(false);
   const [isScreenerOpen, setIsScreenerOpen] = useState<boolean>(false);
-  const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+  const [wsStatus, setWsStatus] = useState<ConnectionState>('disconnected');
+  const [wsDetails, setWsDetails] = useState<WSConnectionDetails>({ state: 'disconnected' });
+  const isManualDisconnectRef = useRef<boolean>(false);
+  const clientRetryAttemptRef = useRef<number>(0);
 
   // Client-side cache for instant timeframe switching: key -> AnalysisData
   const analysisCacheRef = useRef<Map<string, { data: AnalysisData; timestamp: number }>>(new Map());
@@ -270,8 +273,20 @@ export function App() {
       });
   }, [analysis, isLoadingEarlier]);
 
+  // Non-blocking Exponential Backoff calculation for Client WebSocket (1s, 2s, 4s... capped at 30s) + jitter
+  const calculateClientBackoff = useCallback((attempt: number): number => {
+    const initial = 1000;
+    const max = 30000;
+    const nominal = Math.min(max, initial * Math.pow(2, attempt));
+    const jitter = Math.random() * nominal * 0.25;
+    return Math.min(max, nominal + jitter);
+  }, []);
+
   // 4. WebSocket Manager for Real-Time Hyperliquid Ticks & Instant Sweeps
   const connectWebSocket = useCallback(() => {
+    if (isManualDisconnectRef.current) {
+      return;
+    }
     if (
       wsRef.current &&
       (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
@@ -284,7 +299,9 @@ export function App() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        clientRetryAttemptRef.current = 0;
         setWsStatus('connected');
+        setWsDetails({ state: 'connected' });
         // Subscribe to current coin & interval immediately on connect
         ws.send(
           JSON.stringify({
@@ -299,7 +316,18 @@ export function App() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'ws_status') {
-            setWsStatus(data.status === 'connected' ? 'connected' : 'reconnecting');
+            const serverState: ConnectionState = data.status || 'connected';
+            setWsStatus(serverState);
+            setWsDetails({
+              state: serverState,
+              attempt: data.attempt,
+              nextRetryDelay: data.next_retry_delay,
+              reason: data.reason,
+              isManual: data.is_manual,
+            });
+            if (data.is_manual) {
+              isManualDisconnectRef.current = true;
+            }
           } else if (data.type === 'candle_tick') {
             const currentCoin = selectedCoinRef.current.toUpperCase();
             const currentTf = timeframeRef.current.toLowerCase();
@@ -380,10 +408,28 @@ export function App() {
       };
 
       ws.onclose = () => {
-        setWsStatus('reconnecting');
         wsRef.current = null;
+        if (isManualDisconnectRef.current) {
+          setWsStatus('disconnected');
+          setWsDetails({ state: 'disconnected', isManual: true, reason: 'Відключено вручну користувачем' });
+          return;
+        }
+
+        const nextAttempt = clientRetryAttemptRef.current + 1;
+        clientRetryAttemptRef.current = nextAttempt;
+        const delayMs = calculateClientBackoff(nextAttempt - 1);
+        const nextState: ConnectionState = nextAttempt >= 12 ? 'failed' : 'reconnecting';
+
+        setWsStatus(nextState);
+        setWsDetails({
+          state: nextState,
+          attempt: nextAttempt,
+          nextRetryDelay: Math.round(delayMs / 1000),
+          reason: 'З’єднання розірвано. Автоматичний реконект...',
+        });
+
         clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 2000);
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, delayMs);
       };
 
       ws.onerror = () => {
@@ -392,11 +438,57 @@ export function App() {
         }
       };
     } catch (err) {
-      setWsStatus('disconnected');
+      if (isManualDisconnectRef.current) {
+        setWsStatus('disconnected');
+        setWsDetails({ state: 'disconnected', isManual: true });
+        return;
+      }
+      const nextAttempt = clientRetryAttemptRef.current + 1;
+      clientRetryAttemptRef.current = nextAttempt;
+      const delayMs = calculateClientBackoff(nextAttempt - 1);
+      const nextState: ConnectionState = nextAttempt >= 12 ? 'failed' : 'reconnecting';
+      setWsStatus(nextState);
+      setWsDetails({
+        state: nextState,
+        attempt: nextAttempt,
+        nextRetryDelay: Math.round(delayMs / 1000),
+        reason: 'Помилка ініціалізації WebSocket. Повтор...',
+      });
       clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+      reconnectTimeoutRef.current = setTimeout(connectWebSocket, delayMs);
     }
-  }, []);
+  }, [calculateClientBackoff]);
+
+  const handleToggleWS = useCallback(() => {
+    if (wsStatus === 'connected') {
+      // User manual disconnect
+      isManualDisconnectRef.current = true;
+      clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({ action: 'disconnect' }));
+        } catch {
+          // ignore
+        }
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+      setWsStatus('disconnected');
+      setWsDetails({ state: 'disconnected', isManual: true, reason: 'Відключено вручну користувачем' });
+    } else {
+      // User manual reconnect
+      isManualDisconnectRef.current = false;
+      clientRetryAttemptRef.current = 0;
+      setWsStatus('reconnecting');
+      setWsDetails({ state: 'reconnecting', attempt: 1, reason: 'Підключення вручну...' });
+      clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: 'reconnect' }));
+      } else {
+        connectWebSocket();
+      }
+    }
+  }, [wsStatus, connectWebSocket]);
 
   // Connect WebSocket on component mount
   useEffect(() => {
@@ -544,6 +636,8 @@ export function App() {
         onRefresh={() => fetchAnalysis(selectedCoin, timeframe)}
         isLoading={isLoading}
         wsStatus={wsStatus}
+        wsDetails={wsDetails}
+        onToggleWS={handleToggleWS}
       />
 
       {/* Formations & Multi-Timeframe Filter Bar */}

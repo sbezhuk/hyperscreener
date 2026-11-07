@@ -1,6 +1,6 @@
 import React from 'react';
-import { Timeframe } from '../types';
-import { ArrowLeft, RefreshCw, Sun, Moon, Laptop } from 'lucide-react';
+import { Timeframe, ConnectionState, WSConnectionDetails } from '../types';
+import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw } from 'lucide-react';
 import { useTheme, ThemePreference } from '../context/ThemeContext';
 
 interface TopBarProps {
@@ -11,7 +11,9 @@ interface TopBarProps {
   onOpenScreener: () => void;
   onRefresh: () => void;
   isLoading: boolean;
-  wsStatus?: 'connected' | 'reconnecting' | 'disconnected';
+  wsStatus?: ConnectionState;
+  wsDetails?: WSConnectionDetails;
+  onToggleWS?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -23,6 +25,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRefresh,
   isLoading,
   wsStatus = 'connected',
+  wsDetails,
+  onToggleWS,
 }) => {
   const { themePreference, resolvedTheme, setThemePreference } = useTheme();
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
@@ -71,13 +75,25 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="text-xs text-slate-500 dark:text-gray-400 font-medium hidden sm:inline">
             USDT perpetual · Hyperliquid
           </span>
-          <div
-            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-mono font-medium transition ${
+          <button
+            onClick={onToggleWS}
+            title={
               wsStatus === 'connected'
-                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                ? 'З’єднання активне (Hyperliquid WS). Клікніть, щоб зупинити/відключити'
                 : wsStatus === 'reconnecting'
-                ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10'
-                : 'text-rose-600 dark:text-red-400 bg-red-500/10'
+                ? `Відновлення підключення (спроба ${wsDetails?.attempt || 1}, очікування ${wsDetails?.nextRetryDelay || 0}s). Клікніть для негайного реконекту`
+                : wsStatus === 'failed'
+                ? 'Підключення не вдалося. Клікніть, щоб повторити спробу'
+                : 'Відключено вручну. Клікніть, щоб відновити підключення'
+            }
+            className={`group flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded font-mono font-medium transition cursor-pointer hover:opacity-90 active:scale-95 ${
+              wsStatus === 'connected'
+                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20'
+                : wsStatus === 'reconnecting'
+                ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20'
+                : wsStatus === 'failed'
+                ? 'text-rose-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20'
+                : 'text-slate-500 dark:text-gray-400 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20'
             }`}
           >
             <span
@@ -86,17 +102,28 @@ export const TopBar: React.FC<TopBarProps> = ({
                   ? 'bg-[#0ecb81] animate-pulse'
                   : wsStatus === 'reconnecting'
                   ? 'bg-amber-400 animate-ping'
-                  : 'bg-red-500'
+                  : wsStatus === 'failed'
+                  ? 'bg-red-500'
+                  : 'bg-slate-400'
               }`}
             />
             <span>
               {wsStatus === 'connected'
                 ? 'WS LIVE'
                 : wsStatus === 'reconnecting'
-                ? 'RECONNECTING'
+                ? `RECONNECTING ${wsDetails?.attempt ? `#${wsDetails.attempt}` : ''}`
+                : wsStatus === 'failed'
+                ? 'FAILED'
                 : 'OFFLINE'}
             </span>
-          </div>
+            {wsStatus === 'connected' ? (
+              <Power className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-rose-500" />
+            ) : wsStatus === 'reconnecting' ? (
+              <RefreshCcw className="w-2.5 h-2.5 animate-spin ml-0.5" />
+            ) : (
+              <Play className="w-2.5 h-2.5 opacity-70 group-hover:opacity-100 ml-0.5 text-emerald-500" />
+            )}
+          </button>
         </div>
 
         {/* Current Price */}
