@@ -20,13 +20,19 @@ export interface ZonesPrimitiveData {
   }>;
   sweeps?: Array<{
     type: string;
+    subType?: string;
     formation: string;
     levelPrice: number;
     sweepPrice: number;
-    touches: number;
+    touches?: number;
+    levelStrength?: number;
+    volumeRatio?: number;
     direction: 'LONG' | 'SHORT';
     time: number;
+    breakoutTime?: number;
+    confirmationTime?: number;
     desc: string;
+    isLive?: boolean;
   }>;
   activeFormation: FormationFilter;
   theme?: 'dark' | 'light';
@@ -243,13 +249,59 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
 
     // 3. Draw False Breakout / Sweep Levels (Pristine, No Collisions)
     if (activeFormation === 'SWEEP') {
+      // Filter out visual collisions: if two sweeps are within 18px on the Y axis, keep only the most significant one
+      interface VisualSweep {
+        sw: typeof sweeps[0];
+        yLevel: number;
+        ySweep: number | null;
+        xBreakout: number | null;
+        xCandle: number | null;
+        score: number;
+      }
+
+      const visualItems: VisualSweep[] = [];
       sweeps.forEach((sw) => {
         const yLevel = candleSeries.priceToCoordinate(sw.levelPrice);
-        const ySweep = candleSeries.priceToCoordinate(sw.sweepPrice);
-        const xCandle = timeScale.timeToCoordinate(sw.time as any);
-
         if (yLevel === null) return;
+        const ySweep = candleSeries.priceToCoordinate(sw.sweepPrice);
+        const xBreakout = sw.breakoutTime ? timeScale.timeToCoordinate(sw.breakoutTime as any) : null;
+        const xConfirm = sw.confirmationTime ? timeScale.timeToCoordinate(sw.confirmationTime as any) : timeScale.timeToCoordinate(sw.time as any);
+        const xCandle = xConfirm ?? xBreakout;
 
+        // Importance score for collision resolution
+        const strength = sw.levelStrength ?? 50;
+        const touches = sw.touches ?? 1;
+        const recency = sw.time;
+        const score = strength * 2 + touches * 10 + recency * 0.0001;
+
+        visualItems.push({
+          sw,
+          yLevel,
+          ySweep,
+          xBreakout,
+          xCandle,
+          score,
+        });
+      });
+
+      // Sort by importance descending
+      visualItems.sort((a, b) => b.score - a.score);
+
+      // Select items without visual collision (min 20px badge vertical gap)
+      const nonColliding: VisualSweep[] = [];
+      const minPixelGap = 20;
+
+      for (const item of visualItems) {
+        const hasCollision = nonColliding.some(
+          (chosen) => Math.abs(chosen.yLevel - item.yLevel) < minPixelGap
+        );
+        if (!hasCollision) {
+          nonColliding.push(item);
+        }
+      }
+
+      // Draw non-colliding breakouts
+      nonColliding.forEach(({ sw, yLevel, ySweep, xBreakout, xCandle }) => {
         const isLong = sw.direction === 'LONG';
         const color = isLong ? '#0ecb81' : '#f6465d';
 
@@ -263,18 +315,20 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Subtle vertical wick sweep marker on the triggering candle
-        if (xCandle !== null && ySweep !== null) {
+        // Vertical wick/breakout marker on the triggering candle
+        const targetX = xBreakout ?? xCandle;
+        if (targetX !== null && ySweep !== null) {
           ctx.strokeStyle = color;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(xCandle, yLevel);
-          ctx.lineTo(xCandle, ySweep);
+          ctx.moveTo(targetX, yLevel);
+          ctx.lineTo(targetX, ySweep);
           ctx.stroke();
         }
 
-        // Sleek badge on the right edge with dark background (NEVER touches candles)
-        const badgeLabel = `ХИБНИЙ ПРОБІЙ ${sw.levelPrice} (${sw.direction})`;
+        // Sleek badge on the right edge with dark background
+        const typeTag = sw.subType === 'two_candle_reversal' ? ' [2C]' : '';
+        const badgeLabel = `ХИБНИЙ ПРОБІЙ ${sw.levelPrice} (${sw.direction})${typeTag}`;
         drawBadge(ctx, badgeLabel, maxRightX - 8, yLevel, color, 'right', theme);
       });
       return;

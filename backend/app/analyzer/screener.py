@@ -66,7 +66,9 @@ async def analyze_coin_data(
     }
 
     structure_data = analyze_market_structure(candles)
-    liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval)
+    # Pass confirmed active resistance and support levels to false breakout detector
+    all_levels = active_res + active_sup
+    liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval, levels=all_levels)
 
     # 3. FVG Engine (MTF when requested, local fast scan when in screener mode)
     if include_mtf:
@@ -91,7 +93,7 @@ async def analyze_coin_data(
     # 1. False Breakouts / Sweeps (category: "sweep")
     for sweep in liquidity_data["sweeps"]:
         signals.append({
-            "id": f"sweep-{sweep['type']}-{sweep['levelPrice']}",
+            "id": sweep.get("id") or f"sweep-{sweep['type']}-{sweep['levelPrice']}-{sweep['time']}",
             "coin": coin,
             "interval": interval,
             "category": "sweep",
@@ -99,7 +101,11 @@ async def analyze_coin_data(
             "direction": sweep["direction"],
             "desc": sweep["desc"],
             "price": sweep["levelPrice"],
-            "time": sweep["time"]
+            "time": sweep["time"],
+            "confirmationTime": sweep.get("confirmationTime", sweep["time"]),
+            "subType": sweep.get("subType", "wick_rejection"),
+            "touches": sweep.get("touches", 1),
+            "levelStrength": sweep.get("levelStrength", 50.0)
         })
 
     # 2. Cascades (category: "cascade")

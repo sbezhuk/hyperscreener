@@ -1,14 +1,20 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .levels import find_pivot_points, cluster_levels
+from .false_breakout import detect_false_breakouts
 
-def detect_liquidity_and_sweeps(candles: List[Dict[str, Any]], interval: str = "5m", tolerance_pct: float = 0.25) -> Dict[str, Any]:
+def detect_liquidity_and_sweeps(
+    candles: List[Dict[str, Any]],
+    interval: str = "5m",
+    tolerance_pct: float = 0.25,
+    levels: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     """
     Detects:
     1. Equal Highs (EQH) / Equal Lows (EQL) - Liquidity Pools
     2. Liquidity Sweeps / False Breakouts (Хибні пробої)
     3. Robust Trendlines (Наклонки)
     """
-    if len(candles) < 15:
+    if len(candles) < 5:
         return {"pools": [], "sweeps": [], "trendlines": []}
 
     current_price = candles[-1]["close"]
@@ -38,61 +44,35 @@ def detect_liquidity_and_sweeps(candles: List[Dict[str, Any]], interval: str = "
                 "touches": cl["touches"]
             })
 
-    # 2. Liquidity Sweeps (Хибні пробої)
-    # Check last 12 candles for sweeps
-    sweeps = []
-    lookback_candles = candles[-12:]
+    # Prepare levels for false breakout detection:
+    # Combine provided confirmed levels (from levels engine) with clustered swing levels
+    eval_levels: List[Dict[str, Any]] = []
+    if levels:
+        for lvl in levels:
+            eval_levels.append(lvl)
+    else:
+        for ch in clustered_highs:
+            eval_levels.append({
+                "price": ch["price"],
+                "type": "resistance",
+                "touches": ch.get("touches", 1),
+                "strength_score": 60.0
+            })
+        for cl in clustered_lows:
+            eval_levels.append({
+                "price": cl["price"],
+                "type": "support",
+                "touches": cl.get("touches", 1),
+                "strength_score": 60.0
+            })
 
-    # Resistance sweeps (Bearish Sweeps -> Short)
-    candidate_highs = [ch["price"] for ch in clustered_highs]
-    for level_px in candidate_highs:
-        for rc in lookback_candles:
-            if rc["high"] > level_px and rc["close"] < level_px:
-                wick_pct = (rc["high"] - level_px) / level_px * 100
-                if wick_pct >= 0.04:
-                    sweeps.append({
-                        "type": "bearish_sweep",
-                        "formation": "Хибний пробій опору",
-                        "levelPrice": round(level_px, 2 if level_px > 10 else 4),
-                        "sweepPrice": round(rc["high"], 2 if rc["high"] > 10 else 4),
-                        "direction": "SHORT",
-                        "time": rc["time"],
-                        "desc": f"Хибний пробій опору {level_px:.2f}, виніс стопів тінню свічки та повернення під рівень"
-                    })
-
-    # Support sweeps (Bullish Sweeps -> Long)
-    candidate_lows = [cl["price"] for cl in clustered_lows]
-    for level_px in candidate_lows:
-        for rc in lookback_candles:
-            if rc["low"] < level_px and rc["close"] > level_px:
-                wick_pct = (level_px - rc["low"]) / level_px * 100
-                if wick_pct >= 0.04:
-                    sweeps.append({
-                        "type": "bullish_sweep",
-                        "formation": "Хибний пробій підтримки",
-                        "levelPrice": round(level_px, 2 if level_px > 10 else 4),
-                        "sweepPrice": round(rc["low"], 2 if rc["low"] > 10 else 4),
-                        "direction": "LONG",
-                        "time": rc["time"],
-                        "desc": f"Хибний пробій підтримки {level_px:.2f}, виніс стопів тінню свічки та відкуп"
-                    })
-
-    # Merge / Deduplicate nearby sweeps so we NEVER spam overlapping lines
-    clean_sweeps = []
-    seen_levels = []
-    for s in sweeps:
-        # Check if already have a sweep within 0.3% price
-        is_duplicate = False
-        for sl in seen_levels:
-            if abs(s["levelPrice"] - sl) / sl * 100 < 0.3:
-                is_duplicate = True
-                break
-        if not is_duplicate:
-            seen_levels.append(s["levelPrice"])
-            clean_sweeps.append(s)
-
-    # Keep at most 2 closest clean sweeps to guarantee pristine chart readability
-    clean_sweeps = clean_sweeps[:2]
+    # 2. Advanced False Breakouts Detection (covers wick sweeps & two-candle breakouts with returns)
+    clean_sweeps = detect_false_breakouts(
+        candles=candles,
+        levels=eval_levels,
+        interval=interval,
+        min_touches=1
+    )
 
     # 3. Robust Trendlines (Наклонки)
     trendlines = []

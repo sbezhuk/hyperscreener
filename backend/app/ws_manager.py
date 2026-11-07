@@ -39,6 +39,8 @@ class HyperliquidWSManager:
 
         # Levels cache for live sweep checking: (coin, interval) -> { "resistances": [...], "supports": [...] }
         self._levels_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        # Recent closed candle cache: (coin, interval) -> previous candle dict
+        self._prev_candles: Dict[Tuple[str, str], Dict[str, Any]] = {}
         # Avoid duplicate sweep notifications for identical (level, candle_time, direction)
         self._seen_live_sweeps: Set[str] = set()
 
@@ -309,8 +311,10 @@ class HyperliquidWSManager:
 
     def _detect_live_sweep(self, coin: str, interval: str, candle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Instantaneous sweep detection against active levels.
-        Triggers when candle's high/low pierces a level and closes back on the other side.
+        Instantaneous sweep / false breakout detection against active levels on candle close.
+        Supports:
+        - Single candle wick sweep & close back.
+        - Two candle reversal (previous candle broke level, current candle returns and closes on other side).
         """
         levels = self._levels_cache.get((coin, interval))
         if not levels:
@@ -324,54 +328,116 @@ class HyperliquidWSManager:
         c_close = candle["close"]
         c_time = candle["time"]
 
-        # Check resistance sweeps (Bearish Sweeps -> Short)
+        prev_c = self._prev_candles.get((coin, interval))
+        # Update prev_candles on candle time transition
+        if prev_c is None or prev_c["time"] < c_time:
+            # We just rolled over or started
+            if prev_c is not None and prev_c["time"] < c_time:
+                # prev_c is now definitely closed!
+                pass
+
+        # Check resistance false breakout / sweeps (Bearish Sweeps -> Short)
         for r in resistances:
-            level_px = r.get("price")
+            level_px = r.get("center_price", r.get("price"))
             if not level_px:
                 continue
 
-            # Pierced above level, but closed back below it!
+            # Case A: Pierced above level, closed back below it on current closed candle
             if c_high > level_px and c_close < level_px:
                 wick_pct = (c_high - level_px) / level_px * 100
                 if wick_pct >= 0.04:
-                    sweep_sig = f"{coin}-{interval}-{c_time}-bearish-{level_px}"
+                    sweep_sig = f"{coin}-{interval}-{c_time}-bearish-wick-{level_px}"
                     if sweep_sig not in self._seen_live_sweeps:
                         self._seen_live_sweeps.add(sweep_sig)
                         return {
+                            "id": f"live-fb-up-{int(level_px*100)}-{c_time}",
                             "type": "bearish_sweep",
+                            "subType": "wick_rejection",
                             "formation": "Хибний пробій опору (LIVE)",
                             "levelPrice": round(level_px, 2 if level_px > 10 else 4),
                             "sweepPrice": round(c_high, 2 if c_high > 10 else 4),
                             "direction": "SHORT",
                             "time": c_time,
-                            "desc": f"Миттєвий хибний пробій опору {level_px:.2f}: прокол до {c_high:.2f} та повернення під рівень",
+                            "breakoutTime": c_time,
+                            "confirmationTime": c_time,
+                            "desc": f"Хибний пробій опору {level_px:.2f}: прокол до {c_high:.2f} та повернення під рівень",
                             "isLive": True
                         }
 
-        # Check support sweeps (Bullish Sweeps -> Long)
+            # Case B: Two-candle false breakout: prev closed above, current candle closed below
+            if prev_c and prev_c["time"] < c_time:
+                if prev_c["close"] >= level_px and c_close < level_px:
+                    sweep_sig = f"{coin}-{interval}-{c_time}-bearish-2c-{level_px}"
+                    if sweep_sig not in self._seen_live_sweeps:
+                        self._seen_live_sweeps.add(sweep_sig)
+                        max_h = max(c_high, prev_c["high"])
+                        return {
+                            "id": f"live-fb-up-2c-{int(level_px*100)}-{c_time}",
+                            "type": "bearish_sweep",
+                            "subType": "two_candle_reversal",
+                            "formation": "Хибний пробій опору (2 свічки LIVE)",
+                            "levelPrice": round(level_px, 2 if level_px > 10 else 4),
+                            "sweepPrice": round(max_h, 2 if max_h > 10 else 4),
+                            "direction": "SHORT",
+                            "time": c_time,
+                            "breakoutTime": prev_c["time"],
+                            "confirmationTime": c_time,
+                            "desc": f"Хибний пробій опору {level_px:.2f}: вихід тілом свічки та повернення під рівень",
+                            "isLive": True
+                        }
+
+        # Check support false breakout / sweeps (Bullish Sweeps -> Long)
         for s in supports:
-            level_px = s.get("price")
+            level_px = s.get("center_price", s.get("price"))
             if not level_px:
                 continue
 
-            # Pierced below level, but closed back above it!
+            # Case A: Pierced below level, closed back above it on current closed candle
             if c_low < level_px and c_close > level_px:
                 wick_pct = (level_px - c_low) / level_px * 100
                 if wick_pct >= 0.04:
-                    sweep_sig = f"{coin}-{interval}-{c_time}-bullish-{level_px}"
+                    sweep_sig = f"{coin}-{interval}-{c_time}-bullish-wick-{level_px}"
                     if sweep_sig not in self._seen_live_sweeps:
                         self._seen_live_sweeps.add(sweep_sig)
                         return {
+                            "id": f"live-fb-down-{int(level_px*100)}-{c_time}",
                             "type": "bullish_sweep",
+                            "subType": "wick_rejection",
                             "formation": "Хибний пробій підтримки (LIVE)",
                             "levelPrice": round(level_px, 2 if level_px > 10 else 4),
                             "sweepPrice": round(c_low, 2 if c_low > 10 else 4),
                             "direction": "LONG",
                             "time": c_time,
-                            "desc": f"Миттєвий хибний пробій підтримки {level_px:.2f}: прокол до {c_low:.2f} та швидкий відкуп",
+                            "breakoutTime": c_time,
+                            "confirmationTime": c_time,
+                            "desc": f"Хибний пробій підтримки {level_px:.2f}: прокол до {c_low:.2f} та швидкий відкуп",
                             "isLive": True
                         }
 
+            # Case B: Two-candle false breakout: prev closed below, current candle closed above
+            if prev_c and prev_c["time"] < c_time:
+                if prev_c["close"] <= level_px and c_close > level_px:
+                    sweep_sig = f"{coin}-{interval}-{c_time}-bullish-2c-{level_px}"
+                    if sweep_sig not in self._seen_live_sweeps:
+                        self._seen_live_sweeps.add(sweep_sig)
+                        min_l = min(c_low, prev_c["low"])
+                        return {
+                            "id": f"live-fb-down-2c-{int(level_px*100)}-{c_time}",
+                            "type": "bullish_sweep",
+                            "subType": "two_candle_reversal",
+                            "formation": "Хибний пробій підтримки (2 свічки LIVE)",
+                            "levelPrice": round(level_px, 2 if level_px > 10 else 4),
+                            "sweepPrice": round(min_l, 2 if min_l > 10 else 4),
+                            "direction": "LONG",
+                            "time": c_time,
+                            "breakoutTime": prev_c["time"],
+                            "confirmationTime": c_time,
+                            "desc": f"Хибний пробій підтримки {level_px:.2f}: вихід тілом свічки та повернення вище рівня",
+                            "isLive": True
+                        }
+
+        # Keep current candle for future comparison when next candle arrives
+        self._prev_candles[(coin, interval)] = candle
         return None
 
 

@@ -289,15 +289,17 @@ export const Chart: React.FC<ChartProps> = ({
     // Clean candlestick markers
     const rawMarkers: SeriesMarker<any>[] = [];
 
-    // SWEEP markers
+    // SWEEP / FALSE BREAKOUT markers
     if (activeFormation === 'SWEEP' && liquidity?.sweeps) {
       liquidity.sweeps.forEach((sw) => {
+        // Confirmation marker
+        const confirmTime = sw.confirmationTime || sw.time;
         rawMarkers.push({
-          time: sw.time as any,
+          time: confirmTime as any,
           position: sw.direction === 'SHORT' ? 'aboveBar' : 'belowBar',
           color: sw.direction === 'SHORT' ? '#f6465d' : '#0ecb81',
           shape: sw.direction === 'SHORT' ? 'arrowDown' : 'arrowUp',
-          text: '',
+          text: sw.subType === 'two_candle_reversal' ? 'FB 2C' : 'FB',
         });
       });
     }

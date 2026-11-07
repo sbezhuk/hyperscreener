@@ -131,14 +131,21 @@ export interface AnalysisData {
       touches?: number;
     }>;
     sweeps: Array<{
+      id?: string;
       type: string;
+      subType?: string;
       formation: string;
       levelPrice: number;
       sweepPrice: number;
-      touches: number;
+      touches?: number;
+      levelStrength?: number;
+      volumeRatio?: number;
       direction: 'LONG' | 'SHORT';
       time: number;
+      breakoutTime?: number;
+      confirmationTime?: number;
       desc: string;
+      isLive?: boolean;
     }>;
     trendlines: Array<{
       type: string;
