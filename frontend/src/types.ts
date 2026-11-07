@@ -195,6 +195,7 @@ export interface OIData {
 
 export interface AnalysisData {
   isFastPath?: boolean;
+  isLiveTick?: boolean;
   coin: string;
   interval: string;
   currentPrice: number;

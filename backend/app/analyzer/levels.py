@@ -375,8 +375,8 @@ def _add_legacy_fields(zone: Dict[str, Any], current_price: float) -> Dict[str, 
     zone["top"] = round(zone["upper_price"], decimals)
     zone["bottom"] = round(zone["lower_price"], decimals)
     zone["touches"] = zone["touches_count"]
-    zone["firstTime"] = zone["first_detected_at"]
-    zone["latestTime"] = zone["last_tested_at"]
+    zone["firstTime"] = zone.get("first_detected_at", 0)
+    zone["latestTime"] = zone.get("last_tested_at", 0)
     zone["distPct"] = round(dist_pct, 2)
     zone["strength"] = int(min(zone.get("strength_score", 0) / 20, 5))
     return zone
@@ -527,6 +527,7 @@ def analyze_levels(candles: List[Dict[str, Any]], interval: str = "5m") -> Dict[
             new_s = candidate_lows[0]
             center = new_s["price"]
             half_w = 0.35 * atr
+            s_time = new_s.get("time", candles[0]["time"] if candles else 0)
             zone = {
                 "center_price": center,
                 "upper_price": center + half_w,
@@ -539,6 +540,8 @@ def analyze_levels(candles: List[Dict[str, Any]], interval: str = "5m") -> Dict[
                 "zone_id": str(uuid.uuid4())[:8],
                 "type": "support",
                 "timeframe": interval,
+                "first_detected_at": s_time,
+                "last_tested_at": s_time,
             }
             decimals = 6 if current_price < 1 else 4 if current_price < 100 else 2
             for f in ("center_price", "upper_price", "lower_price"):
@@ -553,6 +556,7 @@ def analyze_levels(candles: List[Dict[str, Any]], interval: str = "5m") -> Dict[
             new_r = candidate_highs[0]
             center = new_r["price"]
             half_w = 0.35 * atr
+            r_time = new_r.get("time", candles[0]["time"] if candles else 0)
             zone = {
                 "center_price": center,
                 "upper_price": center + half_w,
@@ -565,6 +569,8 @@ def analyze_levels(candles: List[Dict[str, Any]], interval: str = "5m") -> Dict[
                 "zone_id": str(uuid.uuid4())[:8],
                 "type": "resistance",
                 "timeframe": interval,
+                "first_detected_at": r_time,
+                "last_tested_at": r_time,
             }
             decimals = 6 if current_price < 1 else 4 if current_price < 100 else 2
             for f in ("center_price", "upper_price", "lower_price"):

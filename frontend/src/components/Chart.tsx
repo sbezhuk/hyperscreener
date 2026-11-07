@@ -18,6 +18,7 @@ interface ChartProps {
   navigationToken?: number | null;
   onLoadEarlier?: () => void;
   isLoadingEarlier?: boolean;
+  isLiveTick?: boolean;
 }
 
 export const Chart: React.FC<ChartProps> = ({
@@ -34,6 +35,7 @@ export const Chart: React.FC<ChartProps> = ({
   navigationToken,
   onLoadEarlier,
   isLoadingEarlier = false,
+  isLiveTick = false,
 }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -146,6 +148,7 @@ export const Chart: React.FC<ChartProps> = ({
       prevNavTokenRef.current = null;
       prevCandlesLenRef.current = 0;
       prevFirstCandleTimeRef.current = 0;
+      prevLastCandleTimeRef.current = 0;
       userHasScrolledHistoryRef.current = false;
       priceLinesRef.current = [];
     };
@@ -186,33 +189,27 @@ export const Chart: React.FC<ChartProps> = ({
   const lastSetDataSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const prevCandlesLenRef = useRef<number>(0);
   const prevFirstCandleTimeRef = useRef<number>(0);
+  const prevLastCandleTimeRef = useRef<number>(0);
   const initializedRef = useRef<boolean>(false);
 
   // 2. Update Candles Data & preserve user scroll/zoom position!
   useEffect(() => {
-    if (!candleSeriesRef.current || !chartRef.current || candles.length === 0) return;
+    if (!candleSeriesRef.current || !chartRef.current || !candles || candles.length === 0) return;
 
     const isSeriesChanged = lastSetDataSeriesRef.current !== candleSeriesRef.current;
     const isContextChanged =
-      prevContextRef.current.coin !== coin ||
+      prevContextRef.current.coin.toUpperCase() !== coin.toUpperCase() ||
       prevContextRef.current.interval.toLowerCase() !== (interval || '').toLowerCase();
     const isNewNavigation =
       navigationToken != null && navigationToken !== prevNavTokenRef.current;
 
-    const firstCandleTime = candles[0]?.time || 0;
-    const isPrependedEarlier =
-      !isSeriesChanged &&
-      initializedRef.current &&
-      !isContextChanged &&
-      !isNewNavigation &&
-      prevFirstCandleTimeRef.current !== 0 &&
-      firstCandleTime < prevFirstCandleTimeRef.current;
-
     // Deduplicate and strictly sort ascending to prevent assertion error in lightweight-charts
     const uniqueMap = new Map<number, Candle>();
     for (const c of candles) {
-      if (typeof c.time === 'number' && !isNaN(c.time)) {
-        uniqueMap.set(c.time, c);
+      const rawTime = Number(c.time);
+      if (!isNaN(rawTime) && rawTime > 0) {
+        const timeSec = rawTime > 1e11 ? Math.floor(rawTime / 1000) : rawTime;
+        uniqueMap.set(timeSec, { ...c, time: timeSec });
       }
     }
     const sanitizedCandles = Array.from(uniqueMap.values()).sort((a, b) => Number(a.time) - Number(b.time));
@@ -226,6 +223,17 @@ export const Chart: React.FC<ChartProps> = ({
     }));
 
     if (mappedCandles.length === 0) return;
+
+    const firstCandleTime = Number(mappedCandles[0].time);
+    const lastCandleTime = Number(mappedCandles[mappedCandles.length - 1].time);
+
+    const isPrependedEarlier =
+      !isSeriesChanged &&
+      initializedRef.current &&
+      !isContextChanged &&
+      !isNewNavigation &&
+      prevFirstCandleTimeRef.current !== 0 &&
+      firstCandleTime < prevFirstCandleTimeRef.current;
 
     if (isPrependedEarlier) {
       // User scrolled left into history: save logical range, update data, restore offset so candle under cursor stays still
@@ -308,35 +316,34 @@ export const Chart: React.FC<ChartProps> = ({
         }
       });
 
-      prevContextRef.current = { coin, interval: interval || '' };
-    } else {
-      // Real-time tick or poll update for the current coin/timeframe:
-      // If only the latest bar updated, call update() for speed and zero jitter!
-      if (
-        mappedCandles.length === prevCandlesLenRef.current &&
-        firstCandleTime === prevFirstCandleTimeRef.current
-      ) {
-        const lastCandle = mappedCandles[mappedCandles.length - 1];
-        if (lastCandle) {
-          try {
-            candleSeriesRef.current.update(lastCandle);
-          } catch (err) {
-            candleSeriesRef.current.setData(mappedCandles);
-            lastSetDataSeriesRef.current = candleSeriesRef.current;
-          }
-        }
-      } else {
+      prevContextRef.current = { coin: coin.toUpperCase(), interval: (interval || '').toLowerCase() };
+    } else if (isLiveTick) {
+      // Real-time live tick from WebSocket for the currently active coin & timeframe:
+      // Update or append the latest candle with zero re-rendering overhead
+      const lastCandle = mappedCandles[mappedCandles.length - 1];
+      if (lastCandle) {
         try {
+          candleSeriesRef.current.update(lastCandle);
+        } catch (err) {
           candleSeriesRef.current.setData(mappedCandles);
           lastSetDataSeriesRef.current = candleSeriesRef.current;
-        } catch (err) {
-          console.warn('Safely caught periodic setData error:', err);
         }
+      }
+    } else {
+      // Full historical dataset replacement / reload for the SAME coin/timeframe:
+      // (fast-path -> full analysis, manual refresh, 60s background sync, reconnect recovery)
+      // Call setData() to update the complete history in place, WITHOUT jumping the camera viewport!
+      try {
+        candleSeriesRef.current.setData(mappedCandles);
+        lastSetDataSeriesRef.current = candleSeriesRef.current;
+      } catch (err) {
+        console.warn('Safely caught periodic setData error:', err);
       }
     }
 
     prevCandlesLenRef.current = mappedCandles.length;
-    prevFirstCandleTimeRef.current = mappedCandles[0]?.time ? Number(mappedCandles[0].time) : 0;
+    prevFirstCandleTimeRef.current = firstCandleTime;
+    prevLastCandleTimeRef.current = lastCandleTime;
   }, [candles, coin, interval, targetTimestamp, navigationToken]);
 
   // 3. Update Primitive Data (Zones & Drawings)

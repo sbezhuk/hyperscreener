@@ -94,8 +94,9 @@ export function App() {
       abortControllerRef.current.abort();
     }
 
+    const cleanCoin = coinToFetch.toUpperCase().trim();
     const cleanTf = tfToFetch.toLowerCase();
-    const cacheKey = `${coinToFetch.toUpperCase()}:${cleanTf}`;
+    const cacheKey = `${cleanCoin}:${cleanTf}`;
     const cachedEntry = analysisCacheRef.current.get(cacheKey);
     const now = Date.now();
 
@@ -117,16 +118,16 @@ export function App() {
 
     // Fast-path: If opening without cache, quickly fetch raw candles first so the chart renders in <500ms
     if (!cachedEntry) {
-      fetch(`${API_BASE}/api/candles?coin=${coinToFetch}&interval=${cleanTf}&limit=600`, {
+      fetch(`${API_BASE}/api/candles?coin=${cleanCoin}&interval=${cleanTf}&limit=600`, {
         signal: controller.signal,
       })
         .then((res) => res.json())
         .then((candleData) => {
-          if (candleData.success && candleData.candles && candleData.candles.length > 0) {
+          if (candleData.success && Array.isArray(candleData.candles) && candleData.candles.length > 0) {
             setAnalysis((prev) => {
               // Only apply if full analysis hasn't arrived yet and context is still matching
               if (
-                coinToFetch.toUpperCase() !== selectedCoinRef.current.toUpperCase() ||
+                cleanCoin !== selectedCoinRef.current.toUpperCase() ||
                 cleanTf !== timeframeRef.current.toLowerCase()
               ) {
                 return prev;
@@ -134,7 +135,7 @@ export function App() {
               // If full analysis already arrived (not a fast-path stub), don't overwrite it
               if (
                 prev &&
-                prev.coin?.toUpperCase() === coinToFetch.toUpperCase() &&
+                prev.coin?.toUpperCase() === cleanCoin &&
                 prev.interval?.toLowerCase() === cleanTf &&
                 !prev.isFastPath
               ) {
@@ -143,7 +144,7 @@ export function App() {
               const lastCandle = candleData.candles[candleData.candles.length - 1];
               return {
                 isFastPath: true,
-                coin: coinToFetch,
+                coin: cleanCoin,
                 interval: cleanTf,
                 currentPrice: lastCandle.close,
                 candles: candleData.candles,
@@ -169,15 +170,15 @@ export function App() {
         .catch(() => {});
     }
 
-    fetch(`${API_BASE}/api/analysis?coin=${coinToFetch}&interval=${cleanTf}`, {
+    fetch(`${API_BASE}/api/analysis?coin=${cleanCoin}&interval=${cleanTf}`, {
       signal: controller.signal,
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.success && data.data) {
+        if (data.success && data.data && Array.isArray(data.data.candles) && data.data.candles.length > 0) {
           // Double check request is still relevant to current selection
           if (
-            coinToFetch.toUpperCase() === selectedCoinRef.current.toUpperCase() &&
+            cleanCoin === selectedCoinRef.current.toUpperCase() &&
             cleanTf === timeframeRef.current.toLowerCase()
           ) {
             setAnalysis(data.data);
@@ -196,12 +197,37 @@ export function App() {
       })
       .finally(() => {
         if (
-          coinToFetch.toUpperCase() === selectedCoinRef.current.toUpperCase() &&
+          cleanCoin === selectedCoinRef.current.toUpperCase() &&
           cleanTf === timeframeRef.current.toLowerCase()
         ) {
           setIsLoading(false);
         }
       });
+  }, []);
+
+  // Centralized Coin Selection Handler ensuring clean state reset & cache lookup
+  const handleSelectCoin = useCallback((newCoin: string) => {
+    const cleanCoin = newCoin.toUpperCase().trim();
+    if (cleanCoin === selectedCoinRef.current.toUpperCase()) {
+      return;
+    }
+    // Immediately abort any in-flight requests for the previous coin
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setTargetSignal(null);
+    selectedCoinRef.current = cleanCoin;
+    const cleanTf = timeframeRef.current.toLowerCase();
+    const cacheKey = `${cleanCoin}:${cleanTf}`;
+    const cached = analysisCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAnalysis(cached.data);
+      setIsLoading(false);
+    } else {
+      setAnalysis(null);
+      setIsLoading(true);
+    }
+    setSelectedCoin(cleanCoin);
   }, []);
 
   const mapCategoryToFormation = (cat?: string): FormationFilter | null => {
@@ -241,12 +267,19 @@ export function App() {
       setSelectedTfs([cleanTf]);
 
       if (coinChanged || tfChanged) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        selectedCoinRef.current = cleanCoin;
+        timeframeRef.current = normalizedTf;
         const cacheKey = `${cleanCoin}:${cleanTf}`;
         const cached = analysisCacheRef.current.get(cacheKey);
         if (cached) {
           setAnalysis(cached.data);
+          setIsLoading(false);
         } else {
           setAnalysis(null);
+          setIsLoading(true);
         }
         setSelectedCoin(cleanCoin);
         setTimeframe(normalizedTf);
@@ -303,7 +336,7 @@ export function App() {
                 candleMap.set(c.time, c);
               }
               const combinedCandles = Array.from(candleMap.values()).sort((a, b) => a.time - b.time);
-              const updatedAnalysis = { ...prev, candles: combinedCandles };
+              const updatedAnalysis = { ...prev, isLiveTick: false, candles: combinedCandles };
 
               // Update cache with extended candle range
               const cacheKey = `${currentCoin}:${currentTf}`;
@@ -368,6 +401,7 @@ export function App() {
       };
 
       ws.onmessage = (event) => {
+        if (ws !== wsRef.current) return;
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'ws_status') {
@@ -403,9 +437,13 @@ export function App() {
                 const newCandle = data.candle;
 
                 const lastIdx = updatedCandles.length - 1;
+                if (newCandle.time < updatedCandles[lastIdx].time) {
+                  // Stale or out-of-order tick from older candle: do not alter live chart
+                  return prev;
+                }
                 if (updatedCandles[lastIdx].time === newCandle.time) {
                   updatedCandles[lastIdx] = newCandle;
-                } else if (newCandle.time > updatedCandles[lastIdx].time) {
+                } else {
                   updatedCandles.push(newCandle);
                 }
 
@@ -444,6 +482,7 @@ export function App() {
 
                 return {
                   ...prev,
+                  isLiveTick: true,
                   currentPrice: data.currentPrice,
                   candles: sortedCandles,
                   signals: updatedSignals,
@@ -463,6 +502,7 @@ export function App() {
                 if (!prev || prev.coin?.toUpperCase() !== currentCoin) return prev;
                 return {
                   ...prev,
+                  isLiveTick: false,
                   oi: data.oi_summary || prev.oi,
                 };
               });
@@ -474,6 +514,7 @@ export function App() {
       };
 
       ws.onclose = () => {
+        if (ws !== wsRef.current) return;
         wsRef.current = null;
         if (isManualDisconnectRef.current) {
           setWsStatus('disconnected');
@@ -499,6 +540,7 @@ export function App() {
       };
 
       ws.onerror = () => {
+        if (ws !== wsRef.current) return;
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
@@ -610,7 +652,7 @@ export function App() {
     return () => clearInterval(backgroundSync);
   }, [selectedCoin, timeframe, fetchAnalysis]);
 
-  const currentCoinMeta = allCoins.find((c) => c.name === selectedCoin);
+  const currentCoinMeta = allCoins.find((c) => c.name.toUpperCase() === selectedCoin.toUpperCase());
   const currentPrice = analysis?.currentPrice || currentCoinMeta?.markPrice || 0;
 
   // Multi-Timeframe Level Filtering (Section 2.6)
@@ -693,8 +735,19 @@ export function App() {
         timeframe={timeframe}
         onTimeframeChange={(newTf) => {
           setTargetSignal(null);
+          const cleanCoin = selectedCoinRef.current.toUpperCase();
+          const cleanTf = newTf.toLowerCase();
+          const cacheKey = `${cleanCoin}:${cleanTf}`;
+          const cached = analysisCacheRef.current.get(cacheKey);
+          if (cached) {
+            setAnalysis(cached.data);
+            setIsLoading(false);
+          } else {
+            setAnalysis(null);
+            setIsLoading(true);
+          }
           setTimeframe(newTf);
-          setSelectedTfs([newTf.toLowerCase()]);
+          setSelectedTfs([cleanTf]);
         }}
         onOpenScreener={() => {
           setIsScreenerOpen(true);
@@ -721,7 +774,7 @@ export function App() {
       {/* Main Workspace (Chart + Right Sidebar) */}
       <div className="flex flex-1 overflow-hidden relative">
         <main className="flex-1 h-full relative">
-          {analysis && analysis.candles && analysis.candles.length > 0 ? (
+          {analysis && analysis.candles && analysis.candles.length > 0 && analysis.coin?.toUpperCase() === selectedCoin.toUpperCase() ? (
             <>
               <Chart
                 candles={analysis.candles}
@@ -737,6 +790,7 @@ export function App() {
                 navigationToken={targetSignal?.token}
                 onLoadEarlier={handleLoadEarlier}
                 isLoadingEarlier={isLoadingEarlier}
+                isLiveTick={analysis.isLiveTick}
               />
               {/* Overlay Loader during timeframe or coin switch */}
               {isLoading && (
@@ -778,8 +832,7 @@ export function App() {
         allCoins={allCoins}
         selectedCoin={selectedCoin}
         onSelectCoin={(coin) => {
-          setTargetSignal(null);
-          setSelectedCoin(coin);
+          handleSelectCoin(coin);
           setIsScreenerOpen(false);
         }}
         isLoading={isScreenerLoading}
@@ -791,7 +844,7 @@ export function App() {
           signals={analysis.signals}
           coin={selectedCoin}
           onOpenAlert={handleOpenAlert}
-          onSwitchCoin={(c) => setSelectedCoin(c)}
+          onSwitchCoin={(c) => handleSelectCoin(c)}
         />
       )}
     </div>

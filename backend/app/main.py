@@ -2,8 +2,10 @@ import asyncio
 import json
 import time
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+import httpx
 
 from .hyperliquid import hl_client
 from .ws_manager import hl_ws_manager
@@ -37,8 +39,15 @@ async def get_coins():
     try:
         coins = await hl_client.get_meta_and_contexts()
         return {"success": True, "count": len(coins), "coins": coins}
+    except httpx.HTTPStatusError as e:
+        status = 429 if e.response.status_code == 429 else 502
+        return JSONResponse(status_code=status, content={"success": False, "error": f"Помилка Hyperliquid ({e.response.status_code}): {e.response.text or 'Недоступно'}"})
+    except httpx.TimeoutException as e:
+        return JSONResponse(status_code=504, content={"success": False, "error": f"Таймаут підключення до біржі Hyperliquid: {str(e)}"})
+    except httpx.RequestError as e:
+        return JSONResponse(status_code=502, content={"success": False, "error": f"Мережева помилка зв'язку з біржею Hyperliquid: {str(e)}"})
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"success": False, "error": f"Помилка отримання списку монет: {str(e)}"})
 
 @app.get("/api/candles")
 async def get_candles(
@@ -56,9 +65,27 @@ async def get_candles(
             limit=limit,
             end_time=end_time_ms
         )
+        if not candles:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "error": f"Свічки для монети '{coin.upper()}' ({interval}) не знайдено на біржі.",
+                    "coin": coin.upper(),
+                    "interval": interval,
+                    "candles": []
+                }
+            )
         return {"success": True, "coin": coin.upper(), "interval": interval, "candles": candles}
+    except httpx.HTTPStatusError as e:
+        status = 429 if e.response.status_code == 429 else 502
+        return JSONResponse(status_code=status, content={"success": False, "error": f"Помилка біржі Hyperliquid ({e.response.status_code})", "coin": coin.upper(), "interval": interval, "candles": []})
+    except httpx.TimeoutException as e:
+        return JSONResponse(status_code=504, content={"success": False, "error": f"Таймаут з'єднання з Hyperliquid: {str(e)}", "coin": coin.upper(), "interval": interval, "candles": []})
+    except httpx.RequestError as e:
+        return JSONResponse(status_code=502, content={"success": False, "error": f"Мережева помилка зв'язку з біржею Hyperliquid: {str(e)}", "coin": coin.upper(), "interval": interval, "candles": []})
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"success": False, "error": f"Помилка завантаження свічок {coin.upper()}: {str(e)}", "coin": coin.upper(), "interval": interval, "candles": []})
 
 @app.get("/api/analysis")
 async def get_analysis(
@@ -69,9 +96,21 @@ async def get_analysis(
     """Full technical & SMC analysis (Levels, FVGs, Sweeps, Structure, Signals)."""
     try:
         data = await analyze_coin_data(coin=coin.upper(), interval=interval, limit=limit)
+        if not data or not data.get("candles"):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"Історичні свічки для монети '{coin.upper()}' ({interval}) відсутні або монету не знайдено."}
+            )
         return {"success": True, "data": data}
+    except httpx.HTTPStatusError as e:
+        status = 429 if e.response.status_code == 429 else 502
+        return JSONResponse(status_code=status, content={"success": False, "error": f"Помилка зовнішнього API біржі Hyperliquid ({e.response.status_code})"})
+    except httpx.TimeoutException as e:
+        return JSONResponse(status_code=504, content={"success": False, "error": f"Таймаут підключення до сервера Hyperliquid: {str(e)}"})
+    except httpx.RequestError as e:
+        return JSONResponse(status_code=502, content={"success": False, "error": f"Мережева помилка зв'язку з сервером Hyperliquid: {str(e)}"})
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"success": False, "error": f"Помилка сервера при аналізі {coin.upper()}: {str(e)}"})
 
 @app.get("/api/screener")
 async def get_screener_signals(
