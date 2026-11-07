@@ -269,6 +269,30 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px] truncate">{sig.title}</span>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    {sig.category === 'trendline' && (
+                      <div className="flex items-center gap-1">
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                          Q: {Math.round(sig.structural_quality ?? sig.structuralQuality ?? sig.strength ?? 50)}
+                        </span>
+                        <span
+                          className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                            sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
+                              ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                              : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              : sig.interaction_state === 'COMPRESSION' || sig.interactionState === 'COMPRESSION'
+                              ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                              : sig.interaction_state === 'TESTING' || sig.interactionState === 'TESTING'
+                              ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'
+                              : sig.interaction_state === 'REJECTED' || sig.interactionState === 'REJECTED'
+                              ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                              : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                          }`}
+                        >
+                          {sig.interaction_state || sig.interactionState || 'ACTIVE'}
+                        </span>
+                      </div>
+                    )}
                     {sig.category === 'sweep' && sig.confirmationStatus && (
                       <span
                         className={`px-1 py-0.2 rounded text-[8px] font-bold ${
@@ -306,6 +330,14 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     <span className={`font-bold ${sig.oiDeltaPct < 0 ? 'text-[#0ecb81]' : sig.oiDeltaPct > 0 ? 'text-[#f6465d]' : 'text-slate-400'}`}>
                       {formatOiDeltaPct(sig.oiDeltaPct)}
                     </span>
+                  </div>
+                )}
+
+                {sig.category === 'trendline' && (
+                  <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-slate-500 dark:text-gray-400">
+                    <span>Дотиків: <b className="text-slate-700 dark:text-gray-300">x{sig.touch_count ?? sig.touchCount ?? 2}</b></span>
+                    <span>Відстань: <b className="text-slate-700 dark:text-gray-300">{(sig.distance_to_line_atr ?? sig.distanceToLineAtr ?? 0).toFixed(2)} ATR</b></span>
+                    <span>Стиснення: <b className="text-slate-700 dark:text-gray-300">{(sig.compression_ratio ?? sig.compressionRatio ?? 1.0).toFixed(2)}</b></span>
                   </div>
                 )}
 

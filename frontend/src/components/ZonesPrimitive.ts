@@ -5,22 +5,18 @@ import {
   ISeriesPrimitivePaneRenderer,
   Time,
 } from 'lightweight-charts';
-import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter, LiquiditySweepItem } from '../types';
+import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter, LiquiditySweepItem, TrendlineItem } from '../types';
 
 export interface ZonesPrimitiveData {
   resistances?: LevelItem[];
   supports?: LevelItem[];
   fvgs?: FVGItem[];
   fvgConfluences?: FVGConfluenceItem[];
-  trendlines?: Array<{
-    type: string;
-    label: string;
-    p1: { time: number; price: number };
-    p2: { time: number; price: number };
-  }>;
+  trendlines?: TrendlineItem[];
   sweeps?: Array<LiquiditySweepItem>;
   activeFormation: FormationFilter;
   theme?: 'dark' | 'light';
+  currentTimeframe?: string;
 }
 
 // Helper: draws a sleek pill badge with high contrast that never bleeds into candles
@@ -186,33 +182,55 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       return;
     }
 
-    // 2. Draw Trendlines (Наклонки)
+    // 2. Draw Trendlines (Наклонки) - Strictly per timeframe
     if (activeFormation === 'TRENDLINE') {
+      const currentTf = this._data.currentTimeframe?.toLowerCase();
+
       trendlines.forEach((tl) => {
-        const x1 = timeScale.timeToCoordinate(tl.p1.time as any);
-        const y1 = candleSeries.priceToCoordinate(tl.p1.price);
-        const x2 = timeScale.timeToCoordinate(tl.p2.time as any);
-        const y2 = candleSeries.priceToCoordinate(tl.p2.price);
+        // Enforce strict timeframe independence on canvas
+        if (currentTf && tl.timeframe && tl.timeframe.toLowerCase() !== currentTf) {
+          return;
+        }
+
+        const pt1 = tl.start_point || tl.p1;
+        const pt2 = tl.end_point || tl.p2;
+        if (!pt1 || !pt2) return;
+
+        const x1 = timeScale.timeToCoordinate(pt1.time as any);
+        const y1 = candleSeries.priceToCoordinate(pt1.price);
+        const x2 = timeScale.timeToCoordinate(pt2.time as any);
+        const y2 = candleSeries.priceToCoordinate(pt2.price);
 
         if (x1 === null || y1 === null || x2 === null || y2 === null) return;
         if (x2 <= x1) return;
 
-        const isSupport = tl.type.includes('support');
-        const color = isSupport ? '#0ecb81' : '#f6465d';
+        const tlType = tl.line_type || tl.type || '';
+        const isSupport = tlType.includes('support') || tl.direction === 'ASCENDING' || tl.direction === 'LONG';
+        const isBroken = tl.status === 'BROKEN';
+        const isForming = tl.status === 'FORMING';
+
+        const baseColor = isSupport ? '#0ecb81' : '#f6465d';
+        const color = isBroken ? (isSupport ? 'rgba(14, 203, 129, 0.45)' : 'rgba(246, 70, 93, 0.45)') : baseColor;
 
         const slope = (y2 - y1) / (x2 - x1);
         const extendX = maxRightX;
         const extendY = y2 + slope * (extendX - x2);
 
-        // Ray line
+        // Solid ray line between anchors
         ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = isBroken ? 1.5 : 2;
+        if (isBroken) {
+          ctx.setLineDash([4, 4]);
+        } else {
+          ctx.setLineDash([]);
+        }
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
-        ctx.setLineDash([5, 4]);
+        // Projected extension ray to the right
+        ctx.setLineDash(isBroken ? [3, 4] : [5, 4]);
         ctx.beginPath();
         ctx.moveTo(x2, y2);
         ctx.lineTo(extendX, extendY);
@@ -226,8 +244,50 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.arc(x2, y2, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Badge at right ray end
-        drawBadge(ctx, tl.label, maxRightX - 10, extendY, color, 'right', theme);
+        // 1. Structural Quality (Q) - Neutral styling without directional bias
+        const qVal = tl.structuralQuality ?? tl.structural_quality ?? Math.round(tl.strength ?? 50);
+        const qText = `Q: ${Math.round(qVal)}`;
+        const qColor = theme === 'dark' ? '#cbd5e1' : '#475569';
+
+        // 2. Market Interaction State
+        const rawState = tl.interactionState || tl.interaction_state;
+        const stateLabel = rawState || (isBroken ? 'BREAKOUT' : (isForming ? 'FORMING' : 'ACTIVE'));
+
+        let stateColor = '#94a3b8';
+        if (stateLabel === 'BREAKOUT' || isBroken) {
+          stateColor = '#f6465d';
+        } else if (stateLabel === 'RETEST') {
+          stateColor = '#3b82f6';
+        } else if (stateLabel === 'COMPRESSION') {
+          stateColor = '#f59e0b';
+        } else if (stateLabel === 'TESTING') {
+          stateColor = '#eab308';
+        } else if (stateLabel === 'REJECTED') {
+          stateColor = '#10b981';
+        } else if (stateLabel === 'APPROACHING') {
+          stateColor = '#94a3b8';
+        } else if (stateLabel === 'STALE') {
+          stateColor = '#64748b';
+        }
+
+        // Display label: includes line label, timeframe, and state badge
+        let displayLabel = tl.timeframe_label || tl.label || 'Наклонка';
+        if (isBroken || stateLabel === 'BREAKOUT') {
+          displayLabel += ' [Пробита]';
+        } else if (isForming || stateLabel === 'FORMING') {
+          displayLabel += ' [Формується]';
+        } else if (stateLabel && stateLabel !== 'ACTIVE') {
+          displayLabel += ` [${stateLabel}]`;
+        }
+
+        // Measure Q width to place state badge adjacent to it
+        ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+        const qWidth = ctx.measureText(qText).width + 12;
+
+        // Draw Q badge at rightmost edge
+        drawBadge(ctx, qText, maxRightX - 8, extendY, qColor, 'right', theme);
+        // Draw Market Interaction State badge immediately to the left
+        drawBadge(ctx, displayLabel, maxRightX - 8 - qWidth - 4, extendY, stateColor, 'right', theme);
       });
       return;
     }

@@ -200,6 +200,60 @@ export interface OIData {
   breakout_signals: OILevelAnalysis[];
 }
 
+export interface TrendlineItem {
+  id?: string;
+  timeframe: string;
+  direction: 'ASCENDING' | 'DESCENDING' | 'UP' | 'DOWN' | 'LONG' | 'SHORT';
+  line_type: string;
+  start_point: { time: number; price: number; index?: number };
+  end_point: { time: number; price: number; index?: number };
+  slope: number;
+  touch_count: number;
+  strength: number;
+  status: 'ACTIVE' | 'BROKEN' | 'FORMING' | 'STALE';
+  last_updated: number;
+  type: string;
+  label: string;
+  timeframe_label?: string;
+  p1: { time: number; price: number };
+  p2: { time: number; price: number };
+  score?: number;
+  touches?: number;
+
+  // Trendline Structural Intelligence
+  structural_quality?: number;
+  structuralQuality?: number;
+  structural_quality_components?: {
+    anchor_prominence: number;
+    spacing_regularity: number;
+    ray_precision: number;
+    void_integrity: number;
+  };
+  structuralQualityComponents?: {
+    anchor_prominence: number;
+    spacing_regularity: number;
+    ray_precision: number;
+    void_integrity: number;
+  };
+  interaction_state?: 'APPROACHING' | 'TESTING' | 'REJECTED' | 'COMPRESSION' | 'BREAKOUT' | 'RETEST' | 'STALE' | string;
+  interactionState?: 'APPROACHING' | 'TESTING' | 'REJECTED' | 'COMPRESSION' | 'BREAKOUT' | 'RETEST' | 'STALE' | string;
+  interaction_state_since?: number;
+  interactionStateSince?: number;
+  previous_interaction_state?: string;
+  previousInteractionState?: string;
+  touchCount?: number;
+  last_confirmed_touch?: number;
+  lastConfirmedTouch?: number;
+  touch_spacing_bars?: number;
+  touchSpacingBars?: number;
+  distance_to_line_atr?: number;
+  distanceToLineAtr?: number;
+  compression_ratio?: number;
+  compressionRatio?: number;
+  arrival_velocity?: number;
+  arrivalVelocity?: number;
+}
+
 export interface AnalysisData {
   isFastPath?: boolean;
   isLiveTick?: boolean;
@@ -222,6 +276,8 @@ export interface AnalysisData {
   fvgs: FVGItem[];
   multiTimeframeFvgs?: Record<string, FVGItem[]>;
   fvgConfluences?: FVGConfluenceItem[];
+  trendlines?: TrendlineItem[];
+  multiTimeframeTrendlines?: Record<string, TrendlineItem[]>;
   liquidity: {
     pools: Array<{
       type: string;
@@ -253,12 +309,7 @@ export interface AnalysisData {
       oiReason?: string;
       oiReasonDesc?: string;
     }>;
-    trendlines: Array<{
-      type: string;
-      label: string;
-      p1: { time: number; price: number };
-      p2: { time: number; price: number };
-    }>;
+    trendlines: TrendlineItem[];
   };
   structure: {
     trend: 'BULLISH' | 'BEARISH' | 'EXPANDING' | 'CONSOLIDATING' | 'NEUTRAL';

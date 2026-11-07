@@ -358,8 +358,9 @@ export const Chart: React.FC<ChartProps> = ({
       sweeps: liquidity?.sweeps || [],
       activeFormation,
       theme: isDark ? 'dark' : 'light',
+      currentTimeframe: interval,
     });
-  }, [resistances, supports, fvgs, liquidity, activeFormation, isDark]);
+  }, [resistances, supports, fvgs, liquidity, activeFormation, isDark, interval]);
 
   // 4. Update Candlestick Markers (Unified style, no middle lines)
   useEffect(() => {

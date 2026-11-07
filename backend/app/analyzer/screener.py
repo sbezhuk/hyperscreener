@@ -8,6 +8,8 @@ from .mtf_levels import mtf_levels_manager
 from .fvg import detect_fvgs
 from .mtf_fvg import mtf_fvg_manager
 from .liquidity import detect_liquidity_and_sweeps
+from .trendline import detect_timeframe_trendlines
+from .mtf_trendline import mtf_trendline_manager
 from .structure import analyze_market_structure
 
 async def analyze_coin_data(
@@ -72,6 +74,18 @@ async def analyze_coin_data(
     }
 
     structure_data = analyze_market_structure(candles)
+    # 3. Independent Multi-Timeframe Trendlines Engine
+    if include_mtf:
+        mtf_trendlines = await mtf_trendline_manager.get_all_timeframe_trendlines(
+            coin=coin,
+            active_interval=interval,
+            active_candles=candles,
+        )
+        active_tls = mtf_trendlines.get(clean_tf, [])
+    else:
+        active_tls = detect_timeframe_trendlines(candles, interval=clean_tf)
+        mtf_trendlines = {clean_tf: active_tls}
+
     # Pass confirmed active resistance and support levels to false breakout detector with OI tracker
     all_levels = active_res + active_sup
     coin_tracker = oi_manager.get_tracker(coin)
@@ -84,6 +98,8 @@ async def analyze_coin_data(
         min_oi_drop_pct=min_oi_drop_pct,
         only_confirmed=only_confirmed_sweeps,
     )
+    # Ensure active timeframe trendlines are synced
+    liquidity_data["trendlines"] = active_tls
 
     # 3. FVG Engine (MTF when requested, local fast scan when in screener mode)
     if include_mtf:
@@ -178,17 +194,32 @@ async def analyze_coin_data(
             })
 
     # 3. Trendlines (category: "trendline")
-    for tl in liquidity_data.get("trendlines", []):
+    for tl in active_tls:
+        p1_price = tl.get("start_point", {}).get("price", tl.get("p1", {}).get("price"))
+        p2_price = tl.get("end_point", {}).get("price", tl.get("p2", {}).get("price"))
+        p2_time = tl.get("end_point", {}).get("time", tl.get("p2", {}).get("time"))
         signals.append({
-            "id": f"tl-{tl['type']}-{tl['p2']['price']}",
+            "id": tl.get("id") or f"tl-{clean_tf}-{tl['line_type']}-{p2_price}",
             "coin": coin,
             "interval": interval,
             "category": "trendline",
-            "title": tl["label"],
-            "direction": "LONG" if "support" in tl["type"] else "SHORT",
-            "desc": f"Трендова лінія по свінг-точках ({tl['p1']['price']} -> {tl['p2']['price']})",
-            "price": tl["p2"]["price"],
-            "time": tl["p2"]["time"]
+            "title": tl.get("timeframe_label", tl.get("label", "Наклонка")),
+            "direction": "LONG" if "support" in tl.get("line_type", tl.get("type", "")) else "SHORT",
+            "desc": f"Трендова лінія по свінг-точках ({p1_price} -> {p2_price}) [{clean_tf}]",
+            "price": p2_price,
+            "time": p2_time,
+            "strength": tl.get("structural_quality", tl.get("strength", 50.0)),
+            "status": tl.get("status", "ACTIVE"),
+            "structural_quality": tl.get("structural_quality", 50.0),
+            "interaction_state": tl.get("interaction_state", "ACTIVE"),
+            "structuralQuality": tl.get("structural_quality", 50.0),
+            "interactionState": tl.get("interaction_state", "ACTIVE"),
+            "touch_count": tl.get("touch_count", 2),
+            "touchCount": tl.get("touch_count", 2),
+            "distance_to_line_atr": tl.get("distance_to_line_atr", 0.0),
+            "distanceToLineAtr": tl.get("distance_to_line_atr", 0.0),
+            "compression_ratio": tl.get("compression_ratio", 1.0),
+            "compressionRatio": tl.get("compression_ratio", 1.0),
         })
 
     # 5. FVG (category: "fvg")
@@ -249,6 +280,8 @@ async def analyze_coin_data(
         "fvgs": fvgs,
         "multiTimeframeFvgs": all_timeframe_fvgs,
         "fvgConfluences": fvg_confluences,
+        "trendlines": active_tls,
+        "multiTimeframeTrendlines": mtf_trendlines,
         "liquidity": liquidity_data,
         "structure": structure_data,
         "signals": signals,

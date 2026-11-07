@@ -165,6 +165,8 @@ export function App() {
                 fvgs: [],
                 multiTimeframeFvgs: {},
                 fvgConfluences: [],
+                trendlines: [],
+                multiTimeframeTrendlines: {},
                 liquidity: { sweeps: [], pools: [], trendlines: [] },
                 structure: {
                   trend: 'NEUTRAL',
@@ -786,15 +788,27 @@ export function App() {
     });
   }, [analysis, selectedTfs, minStrength]);
 
-  // Filter sweeps by confirmed OI when toggle is active
+  // Filter sweeps by confirmed OI when toggle is active & enforce strict timeframe isolation for trendlines
   const filteredLiquidity = React.useMemo(() => {
     if (!analysis?.liquidity) return undefined;
-    if (!onlyConfirmedOi || activeFormation !== 'SWEEP') return analysis.liquidity;
+    const baseTrendlines = analysis.trendlines || analysis.liquidity.trendlines || [];
+    const currentTf = timeframe.toLowerCase();
+    const timeframeTrendlines = baseTrendlines.filter(
+      (tl) => !tl.timeframe || tl.timeframe.toLowerCase() === currentTf
+    );
+
+    if (!onlyConfirmedOi || activeFormation !== 'SWEEP') {
+      return {
+        ...analysis.liquidity,
+        trendlines: timeframeTrendlines,
+      };
+    }
     return {
       ...analysis.liquidity,
+      trendlines: timeframeTrendlines,
       sweeps: (analysis.liquidity.sweeps || []).filter((sw) => sw.oiConfirmed),
     };
-  }, [analysis?.liquidity, onlyConfirmedOi, activeFormation]);
+  }, [analysis?.liquidity, analysis?.trendlines, onlyConfirmedOi, activeFormation, timeframe]);
 
   const handleToggleTf = (tf: string) => {
     setSelectedTfs((prev) =>
