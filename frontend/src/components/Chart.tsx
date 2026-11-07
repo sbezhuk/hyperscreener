@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, IChartApi, ISeriesApi, LineStyle, SeriesMarker } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, LineStyle, SeriesMarker, CrosshairMode } from 'lightweight-charts';
 import { Candle, LevelItem, FVGItem, SignalItem, FormationFilter, AnalysisData } from '../types';
 import { ZonesPrimitive } from './ZonesPrimitive';
 import { useTheme } from '../context/ThemeContext';
@@ -66,16 +66,18 @@ export const Chart: React.FC<ChartProps> = ({
         horzLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
       },
       crosshair: {
-        mode: 1,
+        mode: CrosshairMode.Normal,
         vertLine: {
           color: isDark ? '#474d57' : '#94a3b8',
           width: 1,
           style: LineStyle.Dashed,
+          labelVisible: true,
         },
         horzLine: {
           color: isDark ? '#474d57' : '#94a3b8',
           width: 1,
           style: LineStyle.Dashed,
+          labelVisible: true,
         },
       },
       timeScale: {
@@ -127,19 +129,7 @@ export const Chart: React.FC<ChartProps> = ({
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleLogicalRangeChange);
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleLogicalRangeChange);
       chart.remove();
       chartRef.current = null;
@@ -168,8 +158,15 @@ export const Chart: React.FC<ChartProps> = ({
         horzLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
       },
       crosshair: {
-        vertLine: { color: isDark ? '#474d57' : '#94a3b8' },
-        horzLine: { color: isDark ? '#474d57' : '#94a3b8' },
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          color: isDark ? '#474d57' : '#94a3b8',
+          labelVisible: true,
+        },
+        horzLine: {
+          color: isDark ? '#474d57' : '#94a3b8',
+          labelVisible: true,
+        },
       },
       timeScale: {
         borderColor: isDark ? '#1e2329' : '#e2e8f0',
