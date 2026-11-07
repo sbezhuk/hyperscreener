@@ -125,6 +125,13 @@ export interface SignalItem {
   time: number;
   scenario?: string;
   badgeColor?: string;
+  confirmationStatus?: 'CONFIRMED' | 'UNCONFIRMED' | 'POTENTIAL';
+  statusLabel?: string;
+  oiConfirmed?: boolean;
+  oiDeltaPct?: number | null;
+  oiDelta?: number | null;
+  oiReason?: string;
+  oiReasonDesc?: string;
 }
 
 export interface OIDeltaItem {
@@ -238,6 +245,13 @@ export interface AnalysisData {
       confirmationTime?: number;
       desc: string;
       isLive?: boolean;
+      confirmationStatus?: 'CONFIRMED' | 'UNCONFIRMED' | 'POTENTIAL';
+      statusLabel?: string;
+      oiConfirmed?: boolean;
+      oiDeltaPct?: number | null;
+      oiDelta?: number | null;
+      oiReason?: string;
+      oiReasonDesc?: string;
     }>;
     trendlines: Array<{
       type: string;
@@ -261,6 +275,8 @@ export interface AnalysisData {
   signals: SignalItem[];
   oi?: OIData;
 }
+
+export type LiquiditySweepItem = AnalysisData['liquidity']['sweeps'][number];
 
 export interface CoinMeta {
   name: string;

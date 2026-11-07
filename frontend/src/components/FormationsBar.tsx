@@ -9,6 +9,9 @@ interface FormationsBarProps {
   onToggleTf: (tf: string) => void;
   minStrength: number;
   onMinStrengthChange: (score: number) => void;
+  // Open Interest False Breakout Filter
+  onlyConfirmedOi?: boolean;
+  onToggleConfirmedOi?: () => void;
 }
 
 export const FormationsBar: React.FC<FormationsBarProps> = ({
@@ -18,6 +21,8 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
   onToggleTf,
   minStrength,
   onMinStrengthChange,
+  onlyConfirmedOi = false,
+  onToggleConfirmedOi,
 }) => {
   const tabs: { id: FormationFilter; label: string }[] = [
     { id: 'NONE', label: 'Без формацій' },
@@ -99,6 +104,24 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
             );
           })}
         </div>
+
+        {/* OI Confirmation Toggle for False Breakout */}
+        {active === 'SWEEP' && onToggleConfirmedOi && (
+          <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-[#1e2329]">
+            <button
+              onClick={onToggleConfirmedOi}
+              className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                onlyConfirmedOi
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm font-semibold'
+                  : 'bg-white dark:bg-[#15191e] text-slate-500 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-700 dark:hover:text-gray-300'
+              }`}
+              title="Фільтрувати тільки формації, підтверджені скороченням Open Interest"
+            >
+              <span className={`w-2 h-2 rounded-full ${onlyConfirmedOi ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-gray-600'}`} />
+              Тільки підтверджені OI
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

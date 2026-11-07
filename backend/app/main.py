@@ -11,6 +11,7 @@ from .hyperliquid import hl_client
 from .ws_manager import hl_ws_manager
 from .analyzer.screener import analyze_coin_data, scan_market
 from .analyzer.oi_tracker import oi_manager
+from .analyzer.false_breakout import DEFAULT_OI_CONFIG, FalseBreakoutOIConfig
 
 app = FastAPI(title="Hyperliquid Screener API", version="1.0.0")
 
@@ -91,11 +92,23 @@ async def get_candles(
 async def get_analysis(
     coin: str = Query("ETH", description="Coin symbol"),
     interval: str = Query("5m", description="Candle interval (1m, 5m, 15m, 1h, 4h, 1d)"),
-    limit: int = Query(600, ge=50, le=2000)
+    limit: int = Query(600, ge=50, le=2000),
+    min_oi_drop_pct: Optional[float] = Query(None, description="Minimum relative OI drop % for false breakout confirmation"),
+    oi_comparison_bars: Optional[int] = Query(None, description="Bars before breakout to measure baseline OI"),
+    oi_max_wait_bars: Optional[int] = Query(None, description="Max bars to wait for price return"),
+    only_confirmed_sweeps: bool = Query(False, description="Filter only confirmed false breakouts")
 ):
-    """Full technical & SMC analysis (Levels, FVGs, Sweeps, Structure, Signals)."""
+    """Full technical & SMC analysis (Levels, FVGs, Sweeps with OI confirmation, Structure, Signals)."""
     try:
-        data = await analyze_coin_data(coin=coin.upper(), interval=interval, limit=limit)
+        data = await analyze_coin_data(
+            coin=coin.upper(),
+            interval=interval,
+            limit=limit,
+            min_oi_drop_pct=min_oi_drop_pct,
+            oi_comparison_bars=oi_comparison_bars,
+            oi_max_wait_bars=oi_max_wait_bars,
+            only_confirmed_sweeps=only_confirmed_sweeps,
+        )
         if not data or not data.get("candles"):
             return JSONResponse(
                 status_code=404,
@@ -115,14 +128,44 @@ async def get_analysis(
 @app.get("/api/screener")
 async def get_screener_signals(
     top_n: int = Query(25, ge=5, le=50),
-    interval: str = Query("5m")
+    interval: str = Query("5m"),
+    min_oi_drop_pct: Optional[float] = Query(None, description="Minimum relative OI drop % for false breakout confirmation"),
+    only_confirmed_sweeps: bool = Query(False, description="Filter only confirmed false breakouts")
 ):
     """Scans top N coins on Hyperliquid for actionable trading formations."""
     try:
-        results = await scan_market(top_n=top_n, interval=interval)
+        results = await scan_market(
+            top_n=top_n,
+            interval=interval,
+            min_oi_drop_pct=min_oi_drop_pct,
+            only_confirmed_sweeps=only_confirmed_sweeps,
+        )
         return {"success": True, "count": len(results), "results": results}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.get("/api/false_breakout/config")
+async def get_false_breakout_config():
+    """Returns current runtime configuration for False Breakout OI confirmation engine."""
+    return {"success": True, "config": DEFAULT_OI_CONFIG.to_dict()}
+
+@app.post("/api/false_breakout/config")
+async def update_false_breakout_config(new_config: dict):
+    """Updates runtime configuration for False Breakout OI confirmation engine."""
+    try:
+        if "min_oi_drop_pct" in new_config and new_config["min_oi_drop_pct"] is not None:
+            DEFAULT_OI_CONFIG.min_oi_drop_pct = float(new_config["min_oi_drop_pct"])
+        if "comparison_period_bars" in new_config and new_config["comparison_period_bars"] is not None:
+            DEFAULT_OI_CONFIG.comparison_period_bars = int(new_config["comparison_period_bars"])
+        if "max_wait_bars" in new_config and new_config["max_wait_bars"] is not None:
+            DEFAULT_OI_CONFIG.max_wait_bars = int(new_config["max_wait_bars"])
+        if "noise_threshold_pct" in new_config and new_config["noise_threshold_pct"] is not None:
+            DEFAULT_OI_CONFIG.noise_threshold_pct = float(new_config["noise_threshold_pct"])
+        if "stale_oi_max_age_seconds" in new_config and new_config["stale_oi_max_age_seconds"] is not None:
+            DEFAULT_OI_CONFIG.stale_oi_max_age_seconds = int(new_config["stale_oi_max_age_seconds"])
+        return {"success": True, "config": DEFAULT_OI_CONFIG.to_dict()}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"success": False, "error": str(e)})
 
 @app.get("/api/oi")
 async def get_oi(coin: str = Query("ETH", description="Coin symbol")):

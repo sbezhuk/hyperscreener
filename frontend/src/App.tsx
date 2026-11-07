@@ -18,6 +18,7 @@ export function App() {
   // Multi-Timeframe Controls: by default only the active timeframe is enabled
   const [selectedTfs, setSelectedTfs] = useState<string[]>([timeframe.toLowerCase()]);
   const [minStrength, setMinStrength] = useState<number>(50);
+  const [onlyConfirmedOi, setOnlyConfirmedOi] = useState<boolean>(false);
   const [targetSignal, setTargetSignal] = useState<{ time: number; token: number } | null>(null);
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
@@ -481,13 +482,35 @@ export function App() {
                 // Live sweep detected in real time!
                 if (data.sweep) {
                   const sw = data.sweep;
-                  const alreadyExists = updatedSweeps.some(
-                    (s) => s.levelPrice === sw.levelPrice && Math.abs(s.time - sw.time) < 60
+                  const sweepIdx = updatedSweeps.findIndex(
+                    (s) => (sw.id && s.id === sw.id) || (s.levelPrice === sw.levelPrice && Math.abs(s.time - sw.time) < 60)
                   );
-                  if (!alreadyExists) {
-                    updatedSweeps = [sw, ...updatedSweeps].slice(0, 3);
+                  const sigId = sw.id || `live-sweep-${sw.levelPrice}-${sw.time}`;
+
+                  if (sweepIdx >= 0) {
+                    // In-place update to preserve item position while updating confirmation status & OI metrics
+                    updatedSweeps = updatedSweeps.map((s, idx) => (idx === sweepIdx ? { ...s, ...sw } : s));
+                    updatedSignals = updatedSignals.map((sig) => {
+                      if (sig.id === sigId || (sig.price === sw.levelPrice && Math.abs(sig.time - sw.time) < 60)) {
+                        return {
+                          ...sig,
+                          title: sw.formation,
+                          desc: sw.desc,
+                          direction: sw.direction,
+                          confirmationStatus: sw.confirmationStatus,
+                          statusLabel: sw.statusLabel,
+                          oiConfirmed: sw.oiConfirmed,
+                          oiDeltaPct: sw.oiDeltaPct,
+                          oiDelta: sw.oiDelta,
+                          badgeColor: sw.oiConfirmed ? 'green' : (sw.confirmationStatus === 'POTENTIAL' ? 'blue' : 'gray'),
+                        };
+                      }
+                      return sig;
+                    });
+                  } else {
+                    updatedSweeps = [sw, ...updatedSweeps].slice(0, 4);
                     const sweepSignal = {
-                      id: `live-sweep-${sw.levelPrice}-${sw.time}`,
+                      id: sigId,
                       coin: data.coin,
                       interval: data.interval,
                       category: 'sweep' as const,
@@ -496,6 +519,12 @@ export function App() {
                       desc: sw.desc,
                       price: sw.levelPrice,
                       time: sw.time,
+                      confirmationStatus: sw.confirmationStatus,
+                      statusLabel: sw.statusLabel,
+                      oiConfirmed: sw.oiConfirmed,
+                      oiDeltaPct: sw.oiDeltaPct,
+                      oiDelta: sw.oiDelta,
+                      badgeColor: sw.oiConfirmed ? 'green' : (sw.confirmationStatus === 'POTENTIAL' ? 'blue' : 'gray'),
                     };
                     updatedSignals = [sweepSignal, ...updatedSignals];
                   }
@@ -757,6 +786,16 @@ export function App() {
     });
   }, [analysis, selectedTfs, minStrength]);
 
+  // Filter sweeps by confirmed OI when toggle is active
+  const filteredLiquidity = React.useMemo(() => {
+    if (!analysis?.liquidity) return undefined;
+    if (!onlyConfirmedOi || activeFormation !== 'SWEEP') return analysis.liquidity;
+    return {
+      ...analysis.liquidity,
+      sweeps: (analysis.liquidity.sweeps || []).filter((sw) => sw.oiConfirmed),
+    };
+  }, [analysis?.liquidity, onlyConfirmedOi, activeFormation]);
+
   const handleToggleTf = (tf: string) => {
     setSelectedTfs((prev) =>
       prev.includes(tf) ? prev.filter((t) => t !== tf) : [...prev, tf]
@@ -806,6 +845,8 @@ export function App() {
         onToggleTf={handleToggleTf}
         minStrength={minStrength}
         onMinStrengthChange={setMinStrength}
+        onlyConfirmedOi={onlyConfirmedOi}
+        onToggleConfirmedOi={() => setOnlyConfirmedOi((prev) => !prev)}
       />
 
       {/* Main Workspace (Chart + Right Sidebar) */}
@@ -819,7 +860,7 @@ export function App() {
                 supports={filteredSupports}
                 fvgs={filteredFvgs}
                 signals={analysis.signals}
-                liquidity={analysis.liquidity}
+                liquidity={filteredLiquidity}
                 activeFormation={activeFormation}
                 coin={selectedCoin}
                 interval={timeframe}
@@ -858,6 +899,7 @@ export function App() {
           activeFormation={activeFormation}
           onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
           oiData={analysis?.oi}
+          onlyConfirmedOi={onlyConfirmedOi}
         />
       </div>
 

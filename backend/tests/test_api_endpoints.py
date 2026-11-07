@@ -101,6 +101,28 @@ class TestAPIEndpoints(unittest.TestCase):
             self.assertFalse(resp.json()["success"])
             self.assertIn("Помилка сервера", resp.json()["error"])
 
+    def test_false_breakout_config_endpoints(self):
+        # 1. GET current config
+        resp = self.client.get("/api/false_breakout/config")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["success"])
+        self.assertIn("config", data)
+        self.assertIn("min_oi_drop_pct", data["config"])
+        self.assertIn("max_wait_bars", data["config"])
+
+        # 2. POST update config
+        update_payload = {"min_oi_drop_pct": 0.35, "max_wait_bars": 5}
+        resp_post = self.client.post("/api/false_breakout/config", json=update_payload)
+        self.assertEqual(resp_post.status_code, 200)
+        post_data = resp_post.json()
+        self.assertTrue(post_data["success"])
+        self.assertEqual(post_data["config"]["min_oi_drop_pct"], 0.35)
+        self.assertEqual(post_data["config"]["max_wait_bars"], 5)
+
+        # Reset back to default
+        self.client.post("/api/false_breakout/config", json={"min_oi_drop_pct": 0.25, "max_wait_bars": 3})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,13 @@ def detect_liquidity_and_sweeps(
     candles: List[Dict[str, Any]],
     interval: str = "5m",
     tolerance_pct: float = 0.25,
-    levels: Optional[List[Dict[str, Any]]] = None
+    levels: Optional[List[Dict[str, Any]]] = None,
+    oi_tracker: Optional[Any] = None,
+    oi_snapshots: Optional[List[Any]] = None,
+    coin: Optional[str] = None,
+    oi_config: Optional[Any] = None,
+    min_oi_drop_pct: Optional[float] = None,
+    only_confirmed: bool = False,
 ) -> Dict[str, Any]:
     """
     Detects:
@@ -66,12 +72,18 @@ def detect_liquidity_and_sweeps(
                 "strength_score": 60.0
             })
 
-    # 2. Advanced False Breakouts Detection (covers wick sweeps & two-candle breakouts with returns)
+    # 2. Advanced False Breakouts Detection (covers wick sweeps & multi-candle breakouts with returns & OI drop)
     clean_sweeps = detect_false_breakouts(
         candles=candles,
         levels=eval_levels,
         interval=interval,
-        min_touches=1
+        min_touches=1,
+        oi_tracker=oi_tracker,
+        oi_snapshots=oi_snapshots,
+        coin=coin,
+        config=oi_config,
+        min_oi_drop_pct=min_oi_drop_pct,
+        only_confirmed=only_confirmed,
     )
 
     # 3. Robust Trendlines (Наклонки)

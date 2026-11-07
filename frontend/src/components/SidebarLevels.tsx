@@ -12,6 +12,7 @@ interface SidebarLevelsProps {
   activeFormation: FormationFilter;
   onSelectSignal?: (sig: SignalItem) => void;
   oiData?: OIData;
+  onlyConfirmedOi?: boolean;
 }
 
 export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
@@ -24,11 +25,18 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   activeFormation,
   onSelectSignal,
   oiData,
+  onlyConfirmedOi = false,
 }) => {
   const filteredSignals = signals.filter((sig) => {
     if (activeFormation === 'NONE') return false;
     if (activeFormation === 'CASCADE') return sig.category === 'cascade';
-    if (activeFormation === 'SWEEP') return sig.category === 'sweep';
+    if (activeFormation === 'SWEEP') {
+      if (sig.category !== 'sweep') return false;
+      if (onlyConfirmedOi && sig.confirmationStatus !== 'CONFIRMED' && !sig.oiConfirmed) {
+        return false;
+      }
+      return true;
+    }
     if (activeFormation === 'TRENDLINE') return sig.category === 'trendline';
     if (activeFormation === 'FVG') return sig.category === 'fvg';
     return false;
@@ -257,19 +265,50 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 className="p-2 rounded bg-slate-50 dark:bg-[#15191e] border border-slate-200 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 cursor-pointer transition flex flex-col gap-1"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px]">{sig.title}</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                      sig.direction === 'LONG'
-                        ? 'bg-emerald-500/20 text-[#0ecb81]'
-                        : sig.direction === 'SHORT'
-                        ? 'bg-rose-500/20 text-[#f6465d]'
-                        : 'bg-gray-500/20 text-gray-400'
-                    }`}
-                  >
-                    {sig.direction}
-                  </span>
+                  <div className="flex items-center gap-1.5 overflow-hidden">
+                    <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px] truncate">{sig.title}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {sig.category === 'sweep' && sig.confirmationStatus && (
+                      <span
+                        className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                          sig.confirmationStatus === 'CONFIRMED'
+                            ? 'bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30'
+                            : sig.confirmationStatus === 'POTENTIAL'
+                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                            : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
+                        }`}
+                      >
+                        {sig.confirmationStatus === 'CONFIRMED'
+                          ? 'CONFIRMED'
+                          : sig.confirmationStatus === 'POTENTIAL'
+                          ? 'POTENTIAL'
+                          : 'UNCONFIRMED'}
+                      </span>
+                    )}
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        sig.direction === 'LONG'
+                          ? 'bg-emerald-500/20 text-[#0ecb81]'
+                          : sig.direction === 'SHORT'
+                          ? 'bg-rose-500/20 text-[#f6465d]'
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}
+                    >
+                      {sig.direction}
+                    </span>
+                  </div>
                 </div>
+
+                {sig.category === 'sweep' && sig.oiDeltaPct !== undefined && sig.oiDeltaPct !== null && (
+                  <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded">
+                    <span className="text-slate-400 dark:text-gray-500">Зміна Open Interest:</span>
+                    <span className={`font-bold ${sig.oiDeltaPct < 0 ? 'text-[#0ecb81]' : sig.oiDeltaPct > 0 ? 'text-[#f6465d]' : 'text-slate-400'}`}>
+                      {formatOiDeltaPct(sig.oiDeltaPct)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="text-[10px] text-slate-500 dark:text-gray-400 leading-snug">{sig.desc}</div>
               </div>
             ))}

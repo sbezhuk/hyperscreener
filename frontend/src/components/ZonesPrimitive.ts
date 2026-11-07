@@ -5,7 +5,7 @@ import {
   ISeriesPrimitivePaneRenderer,
   Time,
 } from 'lightweight-charts';
-import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter } from '../types';
+import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter, LiquiditySweepItem } from '../types';
 
 export interface ZonesPrimitiveData {
   resistances?: LevelItem[];
@@ -18,22 +18,7 @@ export interface ZonesPrimitiveData {
     p1: { time: number; price: number };
     p2: { time: number; price: number };
   }>;
-  sweeps?: Array<{
-    type: string;
-    subType?: string;
-    formation: string;
-    levelPrice: number;
-    sweepPrice: number;
-    touches?: number;
-    levelStrength?: number;
-    volumeRatio?: number;
-    direction: 'LONG' | 'SHORT';
-    time: number;
-    breakoutTime?: number;
-    confirmationTime?: number;
-    desc: string;
-    isLive?: boolean;
-  }>;
+  sweeps?: Array<LiquiditySweepItem>;
   activeFormation: FormationFilter;
   theme?: 'dark' | 'light';
 }
@@ -328,7 +313,15 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
 
         // Sleek badge on the right edge with dark background
         const typeTag = sw.subType === 'two_candle_reversal' ? ' [2C]' : '';
-        const badgeLabel = `ХИБНИЙ ПРОБІЙ ${sw.levelPrice} (${sw.direction})${typeTag}`;
+        const oiTag = sw.oiDeltaPct !== undefined && sw.oiDeltaPct !== null
+          ? ` [OI ${sw.oiDeltaPct > 0 ? '+' : ''}${sw.oiDeltaPct.toFixed(2)}%]`
+          : '';
+        const statusTag = sw.confirmationStatus === 'CONFIRMED'
+          ? '✓ '
+          : sw.confirmationStatus === 'POTENTIAL'
+          ? '⌛ '
+          : '⚠ ';
+        const badgeLabel = `${statusTag}ХИБНИЙ ПРОБІЙ ${sw.levelPrice} (${sw.direction})${typeTag}${oiTag}`;
         drawBadge(ctx, badgeLabel, maxRightX - 8, yLevel, color, 'right', theme);
       });
       return;

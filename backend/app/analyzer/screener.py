@@ -14,11 +14,16 @@ async def analyze_coin_data(
     coin: str,
     interval: str = "5m",
     limit: int = 600,
-    include_mtf: bool = True
+    include_mtf: bool = True,
+    min_oi_drop_pct: Optional[float] = None,
+    oi_comparison_bars: Optional[int] = None,
+    oi_max_wait_bars: Optional[int] = None,
+    only_confirmed_sweeps: bool = False,
 ) -> Dict[str, Any]:
     """
     Performs complete technical & SMC analysis for a single coin strictly for the requested timeframe,
     and optionally calculates independent Multi-Timeframe (MTF) levels across all timeframes.
+    Filters false breakout formations via Open Interest (OI) drop confirmation.
     """
     candles = await hl_client.get_candles(coin=coin, interval=interval, limit=limit)
     if not candles:
@@ -67,9 +72,18 @@ async def analyze_coin_data(
     }
 
     structure_data = analyze_market_structure(candles)
-    # Pass confirmed active resistance and support levels to false breakout detector
+    # Pass confirmed active resistance and support levels to false breakout detector with OI tracker
     all_levels = active_res + active_sup
-    liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval, levels=all_levels)
+    coin_tracker = oi_manager.get_tracker(coin)
+    liquidity_data = detect_liquidity_and_sweeps(
+        candles,
+        interval=interval,
+        levels=all_levels,
+        oi_tracker=coin_tracker,
+        coin=coin,
+        min_oi_drop_pct=min_oi_drop_pct,
+        only_confirmed=only_confirmed_sweeps,
+    )
 
     # 3. FVG Engine (MTF when requested, local fast scan when in screener mode)
     if include_mtf:
@@ -91,7 +105,7 @@ async def analyze_coin_data(
     # Compile formations / signals
     signals = []
     
-    # 1. False Breakouts / Sweeps (category: "sweep")
+    # 1. False Breakouts / Sweeps (category: "sweep") with full OI confirmation metadata
     for sweep in liquidity_data["sweeps"]:
         signals.append({
             "id": sweep.get("id") or f"sweep-{sweep['type']}-{sweep['levelPrice']}-{sweep['time']}",
@@ -106,7 +120,15 @@ async def analyze_coin_data(
             "confirmationTime": sweep.get("confirmationTime", sweep["time"]),
             "subType": sweep.get("subType", "wick_rejection"),
             "touches": sweep.get("touches", 1),
-            "levelStrength": sweep.get("levelStrength", 50.0)
+            "levelStrength": sweep.get("levelStrength", 50.0),
+            "confirmationStatus": sweep.get("confirmationStatus", "UNCONFIRMED"),
+            "statusLabel": sweep.get("statusLabel"),
+            "oiConfirmed": sweep.get("oiConfirmed", False),
+            "oiDeltaPct": sweep.get("oiDeltaPct"),
+            "oiDelta": sweep.get("oiDelta"),
+            "oiReason": sweep.get("oiReason"),
+            "oiReasonDesc": sweep.get("oiReasonDesc"),
+            "badgeColor": "green" if sweep.get("oiConfirmed") else ("blue" if sweep.get("confirmationStatus") == "POTENTIAL" else "gray"),
         })
 
     # 2. Cascades (category: "cascade")
@@ -234,10 +256,15 @@ async def analyze_coin_data(
     }
 
 
-async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, Any]]:
+async def scan_market(
+    top_n: int = 25,
+    interval: str = "5m",
+    min_oi_drop_pct: Optional[float] = None,
+    only_confirmed_sweeps: bool = False,
+) -> List[Dict[str, Any]]:
     """
     Scans the top N perpetuals on Hyperliquid by 24h volume.
-    Limits concurrency to 5 to protect connection pool and API latency.
+    Limits concurrency to 4 to protect connection pool and API latency.
     """
     coins_meta = await hl_client.get_meta_and_contexts()
     target_coins = [c["name"] for c in coins_meta[:top_n]]
@@ -250,7 +277,14 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
     async def fetch_one(coin):
         async with sem:
             await asyncio.sleep(0.05)
-            return await analyze_coin_data(coin, interval=interval, limit=120, include_mtf=False)
+            return await analyze_coin_data(
+                coin,
+                interval=interval,
+                limit=120,
+                include_mtf=False,
+                min_oi_drop_pct=min_oi_drop_pct,
+                only_confirmed_sweeps=only_confirmed_sweeps,
+            )
 
     tasks = [fetch_one(coin) for coin in target_coins]
     results = await asyncio.gather(*tasks, return_exceptions=True)
