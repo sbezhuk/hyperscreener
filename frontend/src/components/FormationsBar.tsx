@@ -36,10 +36,10 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
   ];
 
   return (
-    <div className="min-h-10 px-4 py-1.5 bg-[#0b0e11] border-b border-[#1e2329] flex items-center justify-between gap-4 select-none text-xs overflow-x-auto no-scrollbar">
+    <div className="min-h-10 px-4 py-1.5 bg-slate-50 dark:bg-[#0b0e11] border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between gap-4 select-none text-xs overflow-x-auto no-scrollbar transition-colors">
       {/* Left: Formation selector */}
       <div className="flex items-center gap-1.5 flex-nowrap flex-shrink-0">
-        <span className="text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Формація:</span>
+        <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Формація:</span>
         {tabs.map((tab) => {
           const isSelected = active === tab.id;
           return (
@@ -48,8 +48,8 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
               onClick={() => onChange(tab.id)}
               className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer ${
                 isSelected
-                  ? 'bg-emerald-950/60 text-[#0ecb81] border border-emerald-500/50 shadow-sm'
-                  : 'bg-[#15191e] text-gray-400 border border-[#23272e] hover:text-gray-200 hover:bg-[#1e2329]'
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50 shadow-sm'
+                  : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-200 hover:bg-slate-100 dark:hover:bg-[#1e2329]'
               }`}
             >
               {tab.label}
@@ -58,44 +58,43 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
         })}
       </div>
 
-      {/* Right / Center: MTF Overlay & Strength Filter Controls */}
-      <div className="flex items-center gap-3 flex-nowrap flex-shrink-0 border-l border-[#1e2329] pl-3 ml-auto">
-        {/* Timeframe Checkboxes / Pills */}
+      {/* Right: Multi-Timeframe Matrix & Strength Filter */}
+      <div className="flex items-center gap-3 flex-nowrap flex-shrink-0 border-l border-slate-200 dark:border-[#1e2329] pl-3 ml-auto">
+        {/* MTF Badges */}
         <div className="flex items-center gap-1">
-          <span className="text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Рівні TF:</span>
+          <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">MTF:</span>
           {mtfList.map((tf) => {
-            const isEnabled = selectedTfs.includes(tf);
-            const label = tf.replace('h', 'H').replace('d', 'D');
+            const isChecked = selectedTfs.includes(tf);
             return (
               <button
                 key={tf}
                 onClick={() => onToggleTf(tf)}
-                title={`Показати/приховати рівні таймфрейму ${label}`}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                  isEnabled
-                    ? 'bg-blue-600/20 text-blue-300 border border-blue-500/60 shadow-sm font-semibold'
-                    : 'bg-[#15191e] text-gray-500 border border-[#23272e] hover:text-gray-400 opacity-60'
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${
+                  isChecked
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm'
+                    : 'bg-white dark:bg-[#15191e] text-slate-400 dark:text-gray-500 border border-slate-300 dark:border-[#23272e] hover:text-slate-600 dark:hover:text-gray-400 opacity-70'
                 }`}
+                title={`Фільтрувати рівні за ТФ ${tf}`}
               >
-                {isEnabled ? `✓${label}` : label}
+                {tf.toUpperCase()}
               </button>
             );
           })}
         </div>
 
-        {/* Strength Score Filter */}
-        <div className="flex items-center gap-1 pl-2 border-l border-[#1e2329]">
-          <span className="text-gray-500 font-medium text-[11px] mr-0.5 whitespace-nowrap">Сила:</span>
+        {/* Strength Filter */}
+        <div className="flex items-center gap-1 pl-2 border-l border-slate-200 dark:border-[#1e2329]">
+          <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Сила:</span>
           {strengthOptions.map((opt) => {
             const isSelected = minStrength === opt.value;
             return (
               <button
                 key={opt.value}
                 onClick={() => onMinStrengthChange(opt.value)}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-medium transition-all cursor-pointer ${
+                className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
                   isSelected
-                    ? 'bg-emerald-950/60 text-[#0ecb81] border border-emerald-500/50'
-                    : 'bg-[#15191e] text-gray-400 border border-[#23272e] hover:text-gray-300'
+                    ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50'
+                    : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-300'
                 }`}
               >
                 {opt.label}

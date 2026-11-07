@@ -35,42 +35,42 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   const allLevelsCount = resistances.length + supports.length;
 
   return (
-    <aside className="w-80 h-full border-l border-[#1e2329] bg-[#0e1114] flex flex-col select-none text-xs">
+    <aside className="w-80 h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors">
       
       {/* 1. Market Structure & Trend Header */}
       {structure && (
-        <div className="p-3 border-b border-[#1e2329] bg-[#15191e]/50 flex-shrink-0">
+        <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/70 dark:bg-[#15191e]/50 flex-shrink-0">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
-              <Activity className="w-3.5 h-3.5 text-blue-400" /> СТРУКТУРА ТА ТРЕНД
+            <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+              <Activity className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /> СТРУКТУРА ТА ТРЕНД
             </span>
             <span
               className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                 structure.trend === 'BULLISH'
-                  ? 'bg-emerald-500/10 text-[#0ecb81]'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-[#0ecb81]'
                   : structure.trend === 'BEARISH'
                   ? 'bg-rose-500/10 text-[#f6465d]'
-                  : 'bg-yellow-500/10 text-yellow-400'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-yellow-400'
               }`}
             >
               {structure.trend}
             </span>
           </div>
-          <div className="text-gray-300 font-medium text-[11px] mt-0.5">
+          <div className="text-slate-700 dark:text-gray-300 font-medium text-[11px] mt-0.5">
             {structure.summary}
           </div>
 
           {(openInterest !== undefined || fundingRate !== undefined) && (
-            <div className="mt-2 pt-2 border-t border-[#1e2329]/60 flex justify-between text-[11px] text-gray-400">
+            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-[#1e2329]/60 flex justify-between text-[11px] text-slate-500 dark:text-gray-400">
               {openInterest !== undefined && (
                 <div>
-                  <span className="text-gray-500">OI: </span>
-                  <span className="text-gray-200 font-mono font-medium">{openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-slate-400 dark:text-gray-500">OI: </span>
+                  <span className="text-slate-800 dark:text-gray-200 font-mono font-medium">{openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                 </div>
               )}
               {fundingRate !== undefined && (
                 <div>
-                  <span className="text-gray-500">Funding: </span>
+                  <span className="text-slate-400 dark:text-gray-500">Funding: </span>
                   <span className={`font-mono font-medium ${fundingRate >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                     {(fundingRate * 100).toFixed(4)}%
                   </span>
@@ -82,13 +82,13 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
       )}
 
       {/* 2. Found Formations Section */}
-      <div className="p-3 border-b border-[#1e2329] flex-shrink-0">
-        <div className="flex items-center justify-between text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
+      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] flex-shrink-0">
+        <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
           <span>ЗНАЙДЕНІ ФОРМАЦІЇ · {filteredSignals.length}</span>
         </div>
 
         {filteredSignals.length === 0 ? (
-          <p className="text-gray-500 text-[11px] leading-relaxed py-1">
+          <p className="text-slate-400 dark:text-gray-500 text-[11px] leading-relaxed py-1">
             Для цієї формації зараз немає сигналів, лише лінії на графіку.
           </p>
         ) : (
@@ -97,10 +97,10 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
               <div
                 key={sig.id}
                 onClick={() => onSelectSignal?.(sig)}
-                className="p-2 rounded bg-[#15191e] border border-[#23272e] hover:border-gray-500 cursor-pointer transition flex flex-col gap-1"
+                className="p-2 rounded bg-slate-50 dark:bg-[#15191e] border border-slate-200 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 cursor-pointer transition flex flex-col gap-1"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-200 font-semibold text-[11px]">{sig.title}</span>
+                  <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px]">{sig.title}</span>
                   <span
                     className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
                       sig.direction === 'LONG'
@@ -113,7 +113,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     {sig.direction}
                   </span>
                 </div>
-                <div className="text-[10px] text-gray-400 leading-snug">{sig.desc}</div>
+                <div className="text-[10px] text-slate-500 dark:text-gray-400 leading-snug">{sig.desc}</div>
               </div>
             ))}
           </div>
@@ -122,7 +122,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
 
       {/* 4. Lines & Zones on Chart Section */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col">
-        <div className="text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
+        <div className="text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
           ЗОНИ ТА РІВНІ · {allLevelsCount}
         </div>
 
@@ -131,17 +131,17 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
           {resistances.map((r, idx) => (
             <div
               key={`r-${idx}`}
-              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-[#15191e] transition text-[11px]"
+              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#15191e] transition text-[11px]"
             >
-              <div className="flex items-center gap-1.5 text-gray-300 overflow-hidden">
+              <div className="flex items-center gap-1.5 text-slate-700 dark:text-gray-300 overflow-hidden">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#f6465d] flex-shrink-0" />
                 {r.timeframe && (
-                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[9px] font-bold flex-shrink-0">
+                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
                     {r.timeframe.replace('h', 'H').replace('d', 'D')}
                   </span>
                 )}
                 <span title={`Діапазон зони: ${r.bottom} - ${r.top}`} className="truncate">
-                  Опір {r.price} {r.touches > 1 ? <span className="text-gray-500">x{r.touches}</span> : ''}
+                  Опір {r.price} {r.touches > 1 ? <span className="text-slate-400 dark:text-gray-500">x{r.touches}</span> : ''}
                 </span>
                 {/* strength_score progress bar */}
                 {r.strength_score !== undefined && (
@@ -150,7 +150,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                       className="inline-block h-1.5 rounded-full bg-[#f6465d]/60"
                       style={{ width: `${Math.round(r.strength_score / 100 * 28)}px`, minWidth: '2px' }}
                     />
-                    <span className="text-[9px] text-gray-500">{Math.round(r.strength_score)}</span>
+                    <span className="text-[9px] text-slate-400 dark:text-gray-500">{Math.round(r.strength_score)}</span>
                   </span>
                 )}
                 {/* status badge (skip 'active') */}
@@ -158,8 +158,8 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                   <span
                     className={`text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${
                       r.status === 'retested'
-                        ? 'bg-blue-500/15 text-blue-400'
-                        : 'bg-yellow-500/15 text-yellow-400'
+                        ? 'bg-blue-500/15 text-blue-500 dark:text-blue-400'
+                        : 'bg-amber-500/15 text-amber-600 dark:text-yellow-400'
                     }`}
                   >
                     {r.status === 'retested' ? 'Дзерк' : 'Ослабл'}
@@ -176,17 +176,17 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
           {supports.map((s, idx) => (
             <div
               key={`s-${idx}`}
-              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-[#15191e] transition text-[11px]"
+              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#15191e] transition text-[11px]"
             >
-              <div className="flex items-center gap-1.5 text-gray-300 overflow-hidden">
+              <div className="flex items-center gap-1.5 text-slate-700 dark:text-gray-300 overflow-hidden">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] flex-shrink-0" />
                 {s.timeframe && (
-                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[9px] font-bold flex-shrink-0">
+                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
                     {s.timeframe.replace('h', 'H').replace('d', 'D')}
                   </span>
                 )}
                 <span title={`Діапазон зони: ${s.bottom} - ${s.top}`} className="truncate">
-                  Підтримка {s.price} {s.touches > 1 ? <span className="text-gray-500">x{s.touches}</span> : ''}
+                  Підтримка {s.price} {s.touches > 1 ? <span className="text-slate-400 dark:text-gray-500">x{s.touches}</span> : ''}
                 </span>
                 {/* strength_score progress bar */}
                 {s.strength_score !== undefined && (
@@ -195,7 +195,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                       className="inline-block h-1.5 rounded-full bg-[#0ecb81]/60"
                       style={{ width: `${Math.round(s.strength_score / 100 * 28)}px`, minWidth: '2px' }}
                     />
-                    <span className="text-[9px] text-gray-500">{Math.round(s.strength_score)}</span>
+                    <span className="text-[9px] text-slate-400 dark:text-gray-500">{Math.round(s.strength_score)}</span>
                   </span>
                 )}
                 {/* status badge (skip 'active') */}
@@ -203,8 +203,8 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                   <span
                     className={`text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${
                       s.status === 'retested'
-                        ? 'bg-blue-500/15 text-blue-400'
-                        : 'bg-yellow-500/15 text-yellow-400'
+                        ? 'bg-blue-500/15 text-blue-500 dark:text-blue-400'
+                        : 'bg-amber-500/15 text-amber-600 dark:text-yellow-400'
                     }`}
                   >
                     {s.status === 'retested' ? 'Дзерк' : 'Ослабл'}
@@ -218,13 +218,13 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
           ))}
 
           {allLevelsCount === 0 && (
-            <div className="text-gray-600 text-center py-4">Зон не виявлено</div>
+            <div className="text-slate-400 dark:text-gray-600 text-center py-4">Зон не виявлено</div>
           )}
         </div>
       </div>
 
       {/* Bottom Explanatory Help */}
-      <div className="p-2.5 border-t border-[#1e2329] text-[10px] text-gray-500 leading-tight bg-[#0b0e11]/50">
+      <div className="p-2.5 border-t border-slate-200 dark:border-[#1e2329] text-[10px] text-slate-400 dark:text-gray-500 leading-tight bg-slate-50/70 dark:bg-[#0b0e11]/50">
         Мульти-таймфреймові рівні: кожен таймфрейм розраховується незалежно та має власний колір і статус.
       </div>
     </aside>

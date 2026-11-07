@@ -29,16 +29,18 @@ export interface ZonesPrimitiveData {
     desc: string;
   }>;
   activeFormation: FormationFilter;
+  theme?: 'dark' | 'light';
 }
 
-// Helper: draws a sleek dark pill badge with high contrast that never bleeds into candles
+// Helper: draws a sleek pill badge with high contrast that never bleeds into candles
 function drawBadge(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
   color: string,
-  align: 'left' | 'right' = 'left'
+  align: 'left' | 'right' = 'left',
+  theme: 'dark' | 'light' = 'dark'
 ) {
   ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
   const metrics = ctx.measureText(text);
@@ -50,8 +52,8 @@ function drawBadge(
   const badgeX = align === 'right' ? x - badgeWidth : x;
   const badgeY = y - badgeHeight / 2;
 
-  // Dark background container
-  ctx.fillStyle = 'rgba(11, 14, 17, 0.92)';
+  // Background container
+  ctx.fillStyle = theme === 'light' ? 'rgba(255, 255, 255, 0.94)' : 'rgba(11, 14, 17, 0.92)';
   ctx.beginPath();
   if (ctx.roundRect) {
     ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 3);
@@ -128,6 +130,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       fvgConfluences: data.fvgConfluences || [],
       trendlines: data.trendlines || [],
       sweeps: data.sweeps || [],
+      theme: data.theme || 'dark',
     };
     if (this._requestUpdate) {
       this._requestUpdate();
@@ -147,6 +150,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
     const fvgs = this._data.fvgs || [];
     const trendlines = this._data.trendlines || [];
     const sweeps = this._data.sweeps || [];
+    const theme = this._data.theme || 'dark';
 
     const timeScale = this._chart.timeScale();
     const candleSeries = this._series;
@@ -186,7 +190,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
 
         // Badge: Bullish / Bearish FVG
         const badgeText = isBull ? '▲ BULL FVG' : '▼ BEAR FVG';
-        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, borderCol, 'right');
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, borderCol, 'right', theme);
       });
       return;
     }
@@ -232,7 +236,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.fill();
 
         // Badge at right ray end
-        drawBadge(ctx, tl.label, maxRightX - 10, extendY, color, 'right');
+        drawBadge(ctx, tl.label, maxRightX - 10, extendY, color, 'right', theme);
       });
       return;
     }
@@ -271,7 +275,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
 
         // Sleek badge on the right edge with dark background (NEVER touches candles)
         const badgeLabel = `ХИБНИЙ ПРОБІЙ ${sw.levelPrice} (${sw.direction})`;
-        drawBadge(ctx, badgeLabel, maxRightX - 8, yLevel, color, 'right');
+        drawBadge(ctx, badgeLabel, maxRightX - 8, yLevel, color, 'right', theme);
       });
       return;
     }
@@ -323,7 +327,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const retestPart = r.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
         const tfBadge = r.timeframe ? ` [${r.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
         const badgeText = `ОПІР${tfBadge} x${r.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
-        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'right');
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'right', theme);
       });
 
       // Draw Supports (ALWAYS GREEN)
@@ -365,7 +369,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const retestPart = s.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
         const tfBadge = s.timeframe ? ` [${s.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
         const badgeText = `ПІДТРИМКА${tfBadge} x${s.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
-        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'right');
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'right', theme);
       });
     }
   }

@@ -1,12 +1,34 @@
 <!doctype html>
-<html lang="uk" class="dark">
+<html lang="uk">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://app.hyperliquid.xyz/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hyperliquid Smart Screener</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('hyperscreener_theme_preference');
+          var isDark = true;
+          if (saved === 'light') {
+            isDark = false;
+          } else if (saved === 'dark') {
+            isDark = true;
+          } else {
+            isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-[#0b0e11] text-gray-200 antialiased overflow-hidden select-none">
+  <body class="bg-slate-100 dark:bg-[#0b0e11] text-slate-900 dark:text-gray-200 antialiased overflow-hidden select-none transition-colors">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

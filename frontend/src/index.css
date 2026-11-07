@@ -16,3 +16,13 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #323842;
 }
+
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

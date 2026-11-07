@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, LineStyle, SeriesMarker } from 'lightweight-charts';
-import { Candle, LevelItem, FVGItem, FVGConfluenceItem, SignalItem, FormationFilter, AnalysisData } from '../types';
+import { Candle, LevelItem, FVGItem, SignalItem, FormationFilter, AnalysisData } from '../types';
 import { ZonesPrimitive } from './ZonesPrimitive';
+import { useTheme } from '../context/ThemeContext';
 
 interface ChartProps {
   candles: Candle[];
@@ -30,6 +31,9 @@ export const Chart: React.FC<ChartProps> = ({
   onLoadEarlier,
   isLoadingEarlier = false,
 }) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -49,35 +53,35 @@ export const Chart: React.FC<ChartProps> = ({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: '#0b0e11' },
-        textColor: '#848e9c',
+        background: { color: isDark ? '#0b0e11' : '#ffffff' },
+        textColor: isDark ? '#848e9c' : '#475569',
         fontSize: 11,
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(30, 35, 41, 0.25)' },
-        horzLines: { color: 'rgba(30, 35, 41, 0.25)' },
+        vertLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
+        horzLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
       },
       crosshair: {
         mode: 1,
         vertLine: {
-          color: '#474d57',
+          color: isDark ? '#474d57' : '#94a3b8',
           width: 1,
           style: LineStyle.Dashed,
         },
         horzLine: {
-          color: '#474d57',
+          color: isDark ? '#474d57' : '#94a3b8',
           width: 1,
           style: LineStyle.Dashed,
         },
       },
       timeScale: {
-        borderColor: '#1e2329',
+        borderColor: isDark ? '#1e2329' : '#e2e8f0',
         timeVisible: true,
         secondsVisible: false,
       },
       rightPriceScale: {
-        borderColor: '#1e2329',
+        borderColor: isDark ? '#1e2329' : '#e2e8f0',
         scaleMargins: {
           top: 0.12,
           bottom: 0.15,
@@ -131,10 +135,33 @@ export const Chart: React.FC<ChartProps> = ({
     };
   }, []);
 
+  // Update chart layout theme dynamically
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.applyOptions({
+      layout: {
+        background: { color: isDark ? '#0b0e11' : '#ffffff' },
+        textColor: isDark ? '#848e9c' : '#475569',
+      },
+      grid: {
+        vertLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
+        horzLines: { color: isDark ? 'rgba(30, 35, 41, 0.25)' : 'rgba(226, 232, 240, 0.8)' },
+      },
+      crosshair: {
+        vertLine: { color: isDark ? '#474d57' : '#94a3b8' },
+        horzLine: { color: isDark ? '#474d57' : '#94a3b8' },
+      },
+      timeScale: {
+        borderColor: isDark ? '#1e2329' : '#e2e8f0',
+      },
+      rightPriceScale: {
+        borderColor: isDark ? '#1e2329' : '#e2e8f0',
+      },
+    });
+  }, [isDark]);
+
   const prevCandlesLenRef = useRef<number>(0);
   const prevFirstCandleTimeRef = useRef<number>(0);
-  // True after the first successful setData() for the current context.
-  // Reset to false whenever coin/interval changes so a fresh setData() is always called first.
   const initializedRef = useRef<boolean>(false);
 
   // 2. Update Candles Data & preserve user scroll/zoom position!
@@ -152,7 +179,16 @@ export const Chart: React.FC<ChartProps> = ({
       prevFirstCandleTimeRef.current !== 0 &&
       firstCandleTime < prevFirstCandleTimeRef.current;
 
-    const mappedCandles = candles.map((c) => ({
+    // Deduplicate and strictly sort ascending to prevent assertion error in lightweight-charts
+    const uniqueMap = new Map<number, Candle>();
+    for (const c of candles) {
+      if (typeof c.time === 'number' && !isNaN(c.time)) {
+        uniqueMap.set(c.time, c);
+      }
+    }
+    const sanitizedCandles = Array.from(uniqueMap.values()).sort((a, b) => Number(a.time) - Number(b.time));
+
+    const mappedCandles = sanitizedCandles.map((c) => ({
       time: c.time as any,
       open: c.open,
       high: c.high,
@@ -160,76 +196,70 @@ export const Chart: React.FC<ChartProps> = ({
       close: c.close,
     }));
 
-    // If earlier data was prepended to history, preserve the user's current scroll range
+    if (mappedCandles.length === 0) return;
+
     if (isPrependedEarlier) {
-      const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-      const addedBarsCount = candles.length - prevCandlesLenRef.current;
+      // User scrolled left into history: save logical range, update data, restore offset so candle under cursor stays still
+      const currentRange = chartRef.current.timeScale().getVisibleLogicalRange();
+      const addedBars = mappedCandles.length - prevCandlesLenRef.current;
 
       try {
         candleSeriesRef.current.setData(mappedCandles);
-        prevCandlesLenRef.current = candles.length;
-        prevFirstCandleTimeRef.current = firstCandleTime;
-
-        if (logicalRange && addedBarsCount > 0) {
-          chartRef.current.timeScale().setVisibleLogicalRange({
-            from: logicalRange.from + addedBarsCount,
-            to: logicalRange.to + addedBarsCount,
-          });
-        }
       } catch (err) {
-        console.error('Error prepending earlier candles:', err);
-      }
-      return;
-    }
-
-    // Always do a full setData() and fitContent() when:
-    // 1. The coin or interval changed (new context)
-    // 2. We have never successfully loaded data for this context yet (initializedRef is false)
-    // 3. A big batch arrived (not a single WS tick)
-    const isBigBatch = initializedRef.current && Math.abs(candles.length - prevCandlesLenRef.current) > 1;
-
-    if (isContextChanged || !initializedRef.current || isBigBatch) {
-      if (isContextChanged) {
-        // Reset state for the new context BEFORE calling setData
-        initializedRef.current = false;
-        prevCandlesLenRef.current = 0;
-        prevFirstCandleTimeRef.current = 0;
-        prevContextRef.current = { coin, interval: interval || '' };
+        console.warn('Safely caught setData error during pagination:', err);
       }
 
+      if (currentRange && addedBars > 0) {
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: currentRange.from + addedBars,
+          to: currentRange.to + addedBars,
+        });
+      }
+    } else if (isContextChanged || !initializedRef.current) {
+      // First load or new coin / timeframe: fresh set, snap right with buffer
       try {
         candleSeriesRef.current.setData(mappedCandles);
-        chartRef.current.timeScale().fitContent();
-        // Mark as initialized ONLY after successful setData
-        initializedRef.current = true;
-        prevCandlesLenRef.current = candles.length;
-        prevFirstCandleTimeRef.current = firstCandleTime;
       } catch (err) {
-        console.error('Error in candleSeries.setData:', err);
-        // Do NOT set initializedRef = true so the next render retries setData
+        console.warn('Safely caught initial setData error:', err);
       }
-      return;
-    }
+      initializedRef.current = true;
 
-    // Incremental real-time update — single candle tick from WebSocket
-    const lastCandle = candles[candles.length - 1];
-    try {
-      candleSeriesRef.current.update({
-        time: lastCandle.time as any,
-        open: lastCandle.open,
-        high: lastCandle.high,
-        low: lastCandle.low,
-        close: lastCandle.close,
+      const totalBars = mappedCandles.length;
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, totalBars - 120),
+        to: totalBars + 12,
       });
-      prevCandlesLenRef.current = candles.length;
-    } catch (err) {
-      // LightweightCharts threw (e.g. time regression) — fallback to full reload
-      console.warn('candle.update() failed, falling back to setData:', err);
-      initializedRef.current = false; // force full reload on next render
+
+      prevContextRef.current = { coin, interval: interval || '' };
+    } else {
+      // Real-time tick or poll update for the current coin/timeframe:
+      // If only the latest bar updated, call update() for speed and zero jitter!
+      if (
+        mappedCandles.length === prevCandlesLenRef.current &&
+        firstCandleTime === prevFirstCandleTimeRef.current
+      ) {
+        const lastCandle = mappedCandles[mappedCandles.length - 1];
+        if (lastCandle) {
+          try {
+            candleSeriesRef.current.update(lastCandle);
+          } catch (err) {
+            candleSeriesRef.current.setData(mappedCandles);
+          }
+        }
+      } else {
+        try {
+          candleSeriesRef.current.setData(mappedCandles);
+        } catch (err) {
+          console.warn('Safely caught periodic setData error:', err);
+        }
+      }
     }
+
+    prevCandlesLenRef.current = mappedCandles.length;
+    prevFirstCandleTimeRef.current = mappedCandles[0]?.time ? Number(mappedCandles[0].time) : 0;
   }, [candles, coin, interval]);
 
-  // 3. Update Zones, Trendlines & Sweeps in Native Primitive
+  // 3. Update Primitive Data (Zones & Drawings)
   useEffect(() => {
     if (!zonesPrimitiveRef.current) return;
 
@@ -240,8 +270,9 @@ export const Chart: React.FC<ChartProps> = ({
       trendlines: liquidity?.trendlines || [],
       sweeps: liquidity?.sweeps || [],
       activeFormation,
+      theme: isDark ? 'dark' : 'light',
     });
-  }, [resistances, supports, fvgs, liquidity, activeFormation]);
+  }, [resistances, supports, fvgs, liquidity, activeFormation, isDark]);
 
   // 4. Update Candlestick Markers (Unified style, no middle lines)
   useEffect(() => {
@@ -255,10 +286,10 @@ export const Chart: React.FC<ChartProps> = ({
     });
     priceLinesRef.current = [];
 
-    // Clean candlestick markers: NO massive text blobs over candles!
+    // Clean candlestick markers
     const rawMarkers: SeriesMarker<any>[] = [];
 
-    // SWEEP markers (crisp arrows on triggering wicks without text pollution)
+    // SWEEP markers
     if (activeFormation === 'SWEEP' && liquidity?.sweeps) {
       liquidity.sweeps.forEach((sw) => {
         rawMarkers.push({
@@ -266,7 +297,7 @@ export const Chart: React.FC<ChartProps> = ({
           position: sw.direction === 'SHORT' ? 'aboveBar' : 'belowBar',
           color: sw.direction === 'SHORT' ? '#f6465d' : '#0ecb81',
           shape: sw.direction === 'SHORT' ? 'arrowDown' : 'arrowUp',
-          text: '', // Clean arrow only!
+          text: '',
         });
       });
     }
@@ -280,16 +311,14 @@ export const Chart: React.FC<ChartProps> = ({
             position: sig.direction === 'SHORT' ? 'aboveBar' : 'belowBar',
             color: sig.direction === 'SHORT' ? '#f6465d' : '#0ecb81',
             shape: sig.direction === 'SHORT' ? 'arrowDown' : 'arrowUp',
-            text: '', // Clean arrow only!
+            text: '',
           });
         }
       });
     }
 
-    // Sort strictly in ascending order by time
     rawMarkers.sort((a, b) => Number(a.time) - Number(b.time));
 
-    // Deduplicate by time to prevent collisions
     const sortedMarkers: SeriesMarker<any>[] = [];
     const seenTimes = new Set<number>();
     for (const m of rawMarkers) {
@@ -308,20 +337,20 @@ export const Chart: React.FC<ChartProps> = ({
   }, [resistances, supports, signals, liquidity, activeFormation]);
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#0b0e11] overflow-hidden">
+    <div className="relative w-full h-full flex flex-col bg-[#0b0e11] dark:bg-[#0b0e11] bg-white overflow-hidden transition-colors">
       <div ref={chartContainerRef} className="w-full flex-1" />
 
       {/* Top indicator for loading earlier history */}
       {isLoadingEarlier && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#15191e]/90 backdrop-blur border border-[#2b313a] text-gray-300 text-xs px-3 py-1.5 rounded-full shadow-lg z-30 transition-all pointer-events-none">
-          <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/90 dark:bg-[#15191e]/90 backdrop-blur border border-slate-200 dark:border-[#2b313a] text-slate-700 dark:text-gray-300 text-xs px-3 py-1.5 rounded-full shadow-lg z-30 transition-all pointer-events-none">
+          <div className="w-3.5 h-3.5 border-2 border-emerald-500 dark:border-emerald-400 border-t-transparent rounded-full animate-spin" />
           <span>Довантаження історії...</span>
         </div>
       )}
 
       <div className="absolute bottom-2 left-3 flex items-center gap-1.5 opacity-60 text-xs font-mono select-none pointer-events-none z-20">
-        <span className="bg-[#1e2329] px-1.5 py-0.5 rounded text-[10px] text-gray-400 font-bold">17</span>
-        <span className="text-gray-500 text-[11px]">TradingView Lightweight Engine · Hyperliquid</span>
+        <span className="bg-slate-200 dark:bg-[#1e2329] px-1.5 py-0.5 rounded text-[10px] text-slate-600 dark:text-gray-400 font-bold">17</span>
+        <span className="text-slate-500 dark:text-gray-500 text-[11px]">TradingView Lightweight Engine · Hyperliquid</span>
       </div>
     </div>
   );

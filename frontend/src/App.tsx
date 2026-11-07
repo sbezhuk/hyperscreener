@@ -228,7 +228,16 @@ export function App() {
               if (!prev || prev.coin?.toUpperCase() !== currentCoin || prev.interval?.toLowerCase() !== currentTf) {
                 return prev;
               }
-              const combinedCandles = [...strictlyOlder, ...prev.candles];
+              
+              // Merge, deduplicate by time, and sort strictly ascending
+              const candleMap = new Map<number, Candle>();
+              for (const c of strictlyOlder) {
+                candleMap.set(c.time, c);
+              }
+              for (const c of prev.candles) {
+                candleMap.set(c.time, c);
+              }
+              const combinedCandles = Array.from(candleMap.values()).sort((a, b) => a.time - b.time);
               const updatedAnalysis = { ...prev, candles: combinedCandles };
 
               // Update cache with extended candle range
@@ -309,7 +318,16 @@ export function App() {
                   } else if (newCandle.time > updatedCandles[lastIdx].time) {
                     updatedCandles.push(newCandle);
                   }
+                } else {
+                  updatedCandles.push(newCandle);
                 }
+
+                // Ensure strict ascending order by time without duplicates
+                const candleMap = new Map<number, Candle>();
+                for (const c of updatedCandles) {
+                  candleMap.set(c.time, c);
+                }
+                const sortedCandles = Array.from(candleMap.values()).sort((a, b) => a.time - b.time);
 
                 let updatedSignals = prev.signals || [];
                 let updatedSweeps = prev.liquidity?.sweeps || [];
@@ -340,7 +358,7 @@ export function App() {
                 return {
                   ...prev,
                   currentPrice: data.currentPrice,
-                  candles: updatedCandles,
+                  candles: sortedCandles,
                   signals: updatedSignals,
                   liquidity: {
                     ...prev.liquidity,
@@ -505,7 +523,7 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0b0e11] text-gray-200 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-screen bg-slate-100 dark:bg-[#0b0e11] text-slate-900 dark:text-gray-200 overflow-hidden font-sans transition-colors">
       {/* Top Header */}
       <TopBar
         coin={selectedCoin}
@@ -554,16 +572,16 @@ export function App() {
               />
               {/* Overlay Loader during timeframe or coin switch */}
               {isLoading && (
-                <div className="absolute inset-0 bg-[#0b0e11]/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-gray-300 text-xs gap-2.5 z-40 transition-all pointer-events-none">
-                  <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                  <span className="font-medium bg-[#15191e]/90 px-3 py-1 rounded-full border border-[#2b313a]">
+                <div className="absolute inset-0 bg-white/60 dark:bg-[#0b0e11]/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-slate-700 dark:text-gray-300 text-xs gap-2.5 z-40 transition-all pointer-events-none">
+                  <div className="w-6 h-6 border-2 border-emerald-500 dark:border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="font-medium bg-white/95 dark:bg-[#15191e]/90 px-3 py-1 rounded-full border border-slate-200 dark:border-[#2b313a] shadow-sm">
                     Оновлення даних {selectedCoin} ({timeframe})...
                   </span>
                 </div>
               )}
             </>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 text-xs gap-3">
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 dark:text-gray-400 text-xs gap-3">
               <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
               <span className="font-medium">Завантаження графіка {selectedCoin} ({timeframe}) з Hyperliquid...</span>
             </div>
