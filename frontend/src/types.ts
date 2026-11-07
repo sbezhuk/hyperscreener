@@ -1,4 +1,16 @@
-export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D';
+export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D' | '1H' | '4H';
+
+export function normalizeTimeframe(tf?: string): Timeframe {
+  if (!tf) return '4h';
+  const clean = tf.trim().toLowerCase();
+  if (clean === '1m') return '1m';
+  if (clean === '5m') return '5m';
+  if (clean === '15m') return '15m';
+  if (clean === '1h') return '1h';
+  if (clean === '4h') return '4h';
+  if (clean === '1d' || clean === 'd') return '1D';
+  return '4h';
+}
 
 export type FormationFilter = 'NONE' | 'CASCADE' | 'SWEEP' | 'TRENDLINE' | 'FVG';
 

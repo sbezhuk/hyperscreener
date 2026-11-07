@@ -6,9 +6,10 @@ interface AlertToastProps {
   signals: SignalItem[];
   coin: string;
   onSwitchCoin?: (coin: string) => void;
+  onOpenAlert?: (coin: string, interval: string, timestamp: number, category?: string) => void;
 }
 
-export const AlertToast: React.FC<AlertToastProps> = ({ signals, coin, onSwitchCoin }) => {
+export const AlertToast: React.FC<AlertToastProps> = ({ signals, coin, onSwitchCoin, onOpenAlert }) => {
   const [activeAlert, setActiveAlert] = useState<SignalItem | null>(null);
 
   useEffect(() => {
@@ -24,6 +25,21 @@ export const AlertToast: React.FC<AlertToastProps> = ({ signals, coin, onSwitchC
 
   if (!activeAlert) return null;
 
+  const handleOpenChart = () => {
+    if (onOpenAlert) {
+      onOpenAlert(activeAlert.coin, activeAlert.interval, activeAlert.time, activeAlert.category);
+    } else if (onSwitchCoin) {
+      onSwitchCoin(activeAlert.coin);
+    }
+  };
+
+  const formattedInterval =
+    activeAlert.interval?.toLowerCase() === '4h'
+      ? '4H'
+      : activeAlert.interval?.toLowerCase() === '1h'
+      ? '1H'
+      : activeAlert.interval;
+
   return (
     <div className="fixed bottom-5 right-5 z-40 max-w-xs w-full bg-white dark:bg-[#15191e] border border-slate-200 dark:border-[#2b313a] rounded-lg shadow-2xl p-3 flex flex-col gap-1.5 select-none animate-in fade-in slide-in-from-bottom-3 duration-300 transition-colors">
       <div className="flex items-center justify-between">
@@ -34,7 +50,7 @@ export const AlertToast: React.FC<AlertToastProps> = ({ signals, coin, onSwitchC
             } animate-ping`}
           />
           <span>
-            {activeAlert.coin} {activeAlert.interval}
+            {activeAlert.coin} {formattedInterval}
           </span>
         </div>
         <button
@@ -53,8 +69,8 @@ export const AlertToast: React.FC<AlertToastProps> = ({ signals, coin, onSwitchC
       <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200 dark:border-[#1e2329] text-[10px]">
         <span className="text-slate-500 dark:text-gray-500 font-mono">Ціна: {activeAlert.price}</span>
         <button
-          onClick={() => onSwitchCoin?.(activeAlert.coin)}
-          className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+          onClick={handleOpenChart}
+          className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer"
         >
           Відкрити графік →
         </button>

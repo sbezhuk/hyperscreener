@@ -5,7 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
-import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle, ConnectionState, WSConnectionDetails } from './types';
+import { Timeframe, normalizeTimeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle, ConnectionState, WSConnectionDetails, SignalItem } from './types';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
@@ -18,6 +18,7 @@ export function App() {
   // Multi-Timeframe Controls: by default only the active timeframe is enabled
   const [selectedTfs, setSelectedTfs] = useState<string[]>([timeframe.toLowerCase()]);
   const [minStrength, setMinStrength] = useState<number>(50);
+  const [targetSignal, setTargetSignal] = useState<{ time: number; token: number } | null>(null);
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [allCoins, setAllCoins] = useState<CoinMeta[]>([]);
@@ -202,6 +203,60 @@ export function App() {
         }
       });
   }, []);
+
+  const mapCategoryToFormation = (cat?: string): FormationFilter | null => {
+    if (!cat) return null;
+    const lower = cat.toLowerCase();
+    if (lower === 'sweep') return 'SWEEP';
+    if (lower === 'cascade') return 'CASCADE';
+    if (lower === 'fvg') return 'FVG';
+    if (lower === 'trendline') return 'TRENDLINE';
+    return null;
+  };
+
+  // 3.0 Alert & Signal Navigation Handler
+  const handleOpenAlert = useCallback(
+    (alertCoin: string, alertInterval: string, timestamp?: number, category?: string) => {
+      const cleanCoin = alertCoin.toUpperCase().trim();
+      const normalizedTf = normalizeTimeframe(alertInterval);
+      const cleanTf = normalizedTf.toLowerCase();
+
+      const coinChanged = cleanCoin !== selectedCoinRef.current.toUpperCase();
+      const tfChanged = cleanTf !== timeframeRef.current.toLowerCase();
+
+      // Automatically switch active formation to match the signal's formation if applicable
+      const targetFormation = mapCategoryToFormation(category);
+      if (targetFormation) {
+        setActiveFormation(targetFormation);
+      }
+
+      // Automatically position chart relative to signal timestamp
+      if (timestamp) {
+        setTargetSignal({ time: timestamp, token: Date.now() });
+      } else {
+        setTargetSignal(null);
+      }
+
+      // Sync multi-timeframe controls to the alert timeframe
+      setSelectedTfs([cleanTf]);
+
+      if (coinChanged || tfChanged) {
+        const cacheKey = `${cleanCoin}:${cleanTf}`;
+        const cached = analysisCacheRef.current.get(cacheKey);
+        if (cached) {
+          setAnalysis(cached.data);
+        } else {
+          setAnalysis(null);
+        }
+        setSelectedCoin(cleanCoin);
+        setTimeframe(normalizedTf);
+      } else {
+        // Same coin and timeframe: fetch fresh analysis if needed
+        fetchAnalysis(cleanCoin, normalizedTf, true);
+      }
+    },
+    [fetchAnalysis]
+  );
 
   // 3.1 Lazy Load Earlier Historical Candles (pagination when scrolling left)
   const handleLoadEarlier = useCallback(() => {
@@ -637,6 +692,7 @@ export function App() {
         price={currentPrice}
         timeframe={timeframe}
         onTimeframeChange={(newTf) => {
+          setTargetSignal(null);
           setTimeframe(newTf);
           setSelectedTfs([newTf.toLowerCase()]);
         }}
@@ -677,6 +733,8 @@ export function App() {
                 activeFormation={activeFormation}
                 coin={selectedCoin}
                 interval={timeframe}
+                targetTimestamp={targetSignal?.time}
+                navigationToken={targetSignal?.token}
                 onLoadEarlier={handleLoadEarlier}
                 isLoadingEarlier={isLoadingEarlier}
               />
@@ -707,6 +765,7 @@ export function App() {
           openInterest={currentCoinMeta?.openInterest}
           fundingRate={currentCoinMeta?.fundingRate}
           activeFormation={activeFormation}
+          onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
           oiData={analysis?.oi}
         />
       </div>
@@ -719,6 +778,7 @@ export function App() {
         allCoins={allCoins}
         selectedCoin={selectedCoin}
         onSelectCoin={(coin) => {
+          setTargetSignal(null);
           setSelectedCoin(coin);
           setIsScreenerOpen(false);
         }}
@@ -730,6 +790,7 @@ export function App() {
         <AlertToast
           signals={analysis.signals}
           coin={selectedCoin}
+          onOpenAlert={handleOpenAlert}
           onSwitchCoin={(c) => setSelectedCoin(c)}
         />
       )}

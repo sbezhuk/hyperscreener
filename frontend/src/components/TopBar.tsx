@@ -250,19 +250,23 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Timeframe selector */}
         <div className="flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5">
-          {timeframes.map((tf) => (
-            <button
-              key={tf}
-              onClick={() => onTimeframeChange(tf)}
-              className={`px-2.5 py-1 text-xs font-semibold rounded transition ${
-                timeframe === tf
-                  ? 'bg-white dark:bg-[#2b313a] text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
-              }`}
-            >
-              {tf}
-            </button>
-          ))}
+          {timeframes.map((tf) => {
+            const isSelected = timeframe.toLowerCase() === tf.toLowerCase();
+            const label = tf.toLowerCase() === '1h' ? '1H' : tf.toLowerCase() === '4h' ? '4H' : tf;
+            return (
+              <button
+                key={tf}
+                onClick={() => onTimeframeChange(tf)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded transition ${
+                  isSelected
+                    ? 'bg-white dark:bg-[#2b313a] text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Refresh button */}

@@ -14,6 +14,8 @@ interface ChartProps {
   activeFormation: FormationFilter;
   coin: string;
   interval?: string;
+  targetTimestamp?: number | null;
+  navigationToken?: number | null;
   onLoadEarlier?: () => void;
   isLoadingEarlier?: boolean;
 }
@@ -28,6 +30,8 @@ export const Chart: React.FC<ChartProps> = ({
   activeFormation,
   coin,
   interval,
+  targetTimestamp,
+  navigationToken,
   onLoadEarlier,
   isLoadingEarlier = false,
 }) => {
@@ -46,6 +50,7 @@ export const Chart: React.FC<ChartProps> = ({
   isLoadingEarlierRef.current = isLoadingEarlier;
 
   const prevContextRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
+  const prevNavTokenRef = useRef<number | null>(null);
   // Track user interaction (drag / scroll) so pagination only triggers on deliberate scrolling into the past
   const userHasScrolledHistoryRef = useRef<boolean>(false);
 
@@ -138,6 +143,7 @@ export const Chart: React.FC<ChartProps> = ({
       lastSetDataSeriesRef.current = null;
       initializedRef.current = false;
       prevContextRef.current = { coin: '', interval: '' };
+      prevNavTokenRef.current = null;
       prevCandlesLenRef.current = 0;
       prevFirstCandleTimeRef.current = 0;
       userHasScrolledHistoryRef.current = false;
@@ -189,13 +195,16 @@ export const Chart: React.FC<ChartProps> = ({
     const isSeriesChanged = lastSetDataSeriesRef.current !== candleSeriesRef.current;
     const isContextChanged =
       prevContextRef.current.coin !== coin ||
-      prevContextRef.current.interval !== (interval || '');
+      prevContextRef.current.interval.toLowerCase() !== (interval || '').toLowerCase();
+    const isNewNavigation =
+      navigationToken != null && navigationToken !== prevNavTokenRef.current;
 
     const firstCandleTime = candles[0]?.time || 0;
     const isPrependedEarlier =
       !isSeriesChanged &&
       initializedRef.current &&
       !isContextChanged &&
+      !isNewNavigation &&
       prevFirstCandleTimeRef.current !== 0 &&
       firstCandleTime < prevFirstCandleTimeRef.current;
 
@@ -236,30 +245,65 @@ export const Chart: React.FC<ChartProps> = ({
           to: currentRange.to + addedBars,
         });
       }
-    } else if (isSeriesChanged || isContextChanged || !initializedRef.current) {
-      // First load, fresh chart series, or new coin / timeframe: fresh set, snap right to "Now"
+    } else if (isSeriesChanged || isContextChanged || isNewNavigation || !initializedRef.current) {
+      // First load, fresh chart series, new coin / timeframe, OR explicit alert navigation:
       try {
         candleSeriesRef.current.setData(mappedCandles);
         lastSetDataSeriesRef.current = candleSeriesRef.current;
       } catch (err) {
-        console.error('Error setting initial candle data:', err);
+        console.error('Error setting candle data:', err);
       }
       initializedRef.current = true;
       userHasScrolledHistoryRef.current = false;
+      if (isNewNavigation) {
+        prevNavTokenRef.current = navigationToken;
+      }
 
       const totalBars = mappedCandles.length;
-      // Set visible range showing recent ~100 bars and right offset space for "Now"
+      let fromIndex = Math.max(0, totalBars - 100);
+      let toIndex = totalBars + 12;
+
+      // Position relative to targetTimestamp if specified
+      if (targetTimestamp && totalBars > 0) {
+        const targetSec = targetTimestamp > 1e11 ? Math.floor(targetTimestamp / 1000) : targetTimestamp;
+        let targetIdx = -1;
+        let minDiff = Infinity;
+
+        for (let i = 0; i < mappedCandles.length; i++) {
+          const cTime = Number(mappedCandles[i].time);
+          const diff = Math.abs(cTime - targetSec);
+          if (diff < minDiff) {
+            minDiff = diff;
+            targetIdx = i;
+          }
+        }
+
+        if (targetIdx !== -1) {
+          // Provide ~30 bars of historical context before the alert signal
+          const contextBefore = Math.min(30, targetIdx);
+          fromIndex = Math.max(0, targetIdx - contextBefore);
+          
+          // Ensure current live candle and right offset margin are displayed
+          toIndex = totalBars + 12;
+
+          // Prevent extreme zoom out if alert is exceptionally distant (>350 bars)
+          if (toIndex - fromIndex > 350) {
+            toIndex = Math.min(totalBars + 12, targetIdx + 120);
+          }
+        }
+      }
+
       chartRef.current.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, totalBars - 100),
-        to: totalBars + 12,
+        from: fromIndex,
+        to: toIndex,
       });
 
-      // Re-affirm range on next animation frame in case container flexbox layout was settling on initial mount
+      // Re-affirm range on next animation frame in case container layout was settling
       requestAnimationFrame(() => {
         if (chartRef.current && !userHasScrolledHistoryRef.current) {
           chartRef.current.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, totalBars - 100),
-            to: totalBars + 12,
+            from: fromIndex,
+            to: toIndex,
           });
         }
       });
@@ -293,7 +337,7 @@ export const Chart: React.FC<ChartProps> = ({
 
     prevCandlesLenRef.current = mappedCandles.length;
     prevFirstCandleTimeRef.current = mappedCandles[0]?.time ? Number(mappedCandles[0].time) : 0;
-  }, [candles, coin, interval]);
+  }, [candles, coin, interval, targetTimestamp, navigationToken]);
 
   // 3. Update Primitive Data (Zones & Drawings)
   useEffect(() => {
