@@ -153,9 +153,32 @@ class OITracker:
             return True
         return (time.time() - self._history[-1].timestamp) > self.stale_threshold_seconds
 
+    def _find_closest_snapshot(self, target_time: float) -> Optional[OISnapshot]:
+        """
+        Fast O(log N) bisect lookup for the snapshot closest in time to target_time
+        (evaluating candidates on both sides of target_time to find minimal |timestamp - target_time|).
+        """
+        if not self._history:
+            return None
+        if target_time >= self._timestamps[-1]:
+            return self._history[-1]
+        if target_time <= self._timestamps[0]:
+            return self._history[0]
+
+        idx = bisect.bisect_left(self._timestamps, target_time)
+        # idx is the first snapshot with timestamp >= target_time
+        # idx - 1 is the snapshot with timestamp < target_time
+        before_snap = self._history[idx - 1]
+        after_snap = self._history[idx]
+
+        if abs(target_time - before_snap.timestamp) <= abs(after_snap.timestamp - target_time):
+            return before_snap
+        else:
+            return after_snap
+
     def _find_snapshot_at_or_before(self, target_time: float) -> Optional[OISnapshot]:
         """
-        Fast O(log N) bisect lookup for the snapshot closest to (at or immediately before) target_time.
+        Fast O(log N) bisect lookup for the snapshot at or immediately before target_time.
         """
         if not self._history:
             return None
@@ -229,15 +252,12 @@ class OITracker:
 
         # 1. Check history completeness: history must span at least (interval - tolerance)
         if total_history_span < (interval_seconds - tolerance):
-            prev_oi = first_available.oi
-            delta = curr.oi - prev_oi
-            delta_pct = ((curr.oi - prev_oi) / prev_oi * 100.0) if prev_oi > 0 else 0.0
             return {
                 "interval_seconds": interval_seconds,
                 "current_oi": curr.oi,
-                "previous_oi": prev_oi,
-                "delta": round(delta, 4),
-                "delta_pct": round(delta_pct, 4),
+                "previous_oi": first_available.oi,
+                "delta": None,
+                "delta_pct": None,
                 "status": "INSUFFICIENT_HISTORY",
                 "is_valid": False,
                 "start_time": first_available.timestamp,
@@ -245,17 +265,33 @@ class OITracker:
                 "actual_duration_seconds": round(total_history_span, 1)
             }
 
-        start_snap = self._find_snapshot_at_or_before(target_start)
+        start_snap = self._find_closest_snapshot(target_start)
         if not start_snap:
             return {
                 "interval_seconds": interval_seconds,
                 "current_oi": curr.oi,
                 "previous_oi": None,
-                "delta": 0.0,
-                "delta_pct": 0.0,
+                "delta": None,
+                "delta_pct": None,
                 "status": "NO_DATA",
                 "is_valid": False,
                 "start_time": None,
+                "end_time": curr.timestamp,
+                "actual_duration_seconds": 0
+            }
+
+        # Guard against look-ahead beyond target_start + tolerance:
+        # start_snap must not be in the future relative to curr.timestamp
+        if start_snap.timestamp >= curr.timestamp:
+            return {
+                "interval_seconds": interval_seconds,
+                "current_oi": curr.oi,
+                "previous_oi": None,
+                "delta": None,
+                "delta_pct": None,
+                "status": "GAP_DETECTED",
+                "is_valid": False,
+                "start_time": start_snap.timestamp,
                 "end_time": curr.timestamp,
                 "actual_duration_seconds": 0
             }
@@ -266,14 +302,12 @@ class OITracker:
 
         if deviation > tolerance:
             # Significant data gap occurred
-            delta = curr.oi - start_snap.oi
-            delta_pct = ((curr.oi - start_snap.oi) / start_snap.oi * 100.0) if start_snap.oi > 0 else 0.0
             return {
                 "interval_seconds": interval_seconds,
                 "current_oi": curr.oi,
                 "previous_oi": start_snap.oi,
-                "delta": round(delta, 4),
-                "delta_pct": round(delta_pct, 4),
+                "delta": None,
+                "delta_pct": None,
                 "status": "GAP_DETECTED",
                 "is_valid": False,
                 "start_time": start_snap.timestamp,
@@ -330,7 +364,7 @@ class OITracker:
         """
         fallback_threshold = 0.25
 
-        if len(self._history) < 10:
+        if len(self._history) < 2:
             return {
                 "threshold_pct": fallback_threshold,
                 "is_adaptive": False,
@@ -343,37 +377,37 @@ class OITracker:
         first_ts = self._history[0].timestamp
         span = now - first_ts
 
-        # Need at least 10 minutes of history for a stable adaptive threshold
-        if span < 600:
+        # Need at least 5 minutes (300 seconds) of history for a stable adaptive threshold
+        if span < 300:
             return {
                 "threshold_pct": fallback_threshold,
                 "is_adaptive": False,
                 "status": "INSUFFICIENT_HISTORY",
                 "samples_count": len(self._history),
-                "desc": "Історія коротша за 10 хвилин (використовується фіксований 0.25%)"
+                "desc": f"Історія коротша за 5 хвилин ({span:.0f}s / 300s, використовується фіксований 0.25%)"
             }
 
         effective_period = min(sample_period_seconds, int(span))
         minute_steps = effective_period // 60
 
-        # Sample snapshots at discrete 1-minute steps backwards
+        # Sample snapshots at discrete 1-minute steps backwards using closest snapshot
         sampled_ois: List[float] = []
         for step in range(minute_steps + 1):
             t_target = now - (step * 60)
-            snap = self._find_snapshot_at_or_before(t_target)
-            if snap and abs(t_target - snap.timestamp) <= 25.0 and snap.oi > 0:
+            snap = self._find_closest_snapshot(t_target)
+            if snap and abs(t_target - snap.timestamp) <= 30.0 and snap.oi > 0:
                 sampled_ois.append(snap.oi)
 
-        if len(sampled_ois) < 8:
+        if len(sampled_ois) < 5:
             return {
                 "threshold_pct": fallback_threshold,
                 "is_adaptive": False,
                 "status": "INSUFFICIENT_HISTORY",
                 "samples_count": len(sampled_ois),
-                "desc": "Недостатньо дискретних хвилинних зрізів (використовується 0.25%)"
+                "desc": f"Недостатньо дискретних хвилинних зрізів ({len(sampled_ois)} < 5, використовується 0.25%)"
             }
 
-        # Compute step-by-step percentage changes
+        # Compute step-by-step 1-minute percentage changes
         pct_changes: List[float] = []
         for i in range(len(sampled_ois) - 1):
             prev = sampled_ois[i + 1]
@@ -382,7 +416,7 @@ class OITracker:
                 pct = abs((curr - prev) / prev * 100.0)
                 pct_changes.append(pct)
 
-        if len(pct_changes) < 6:
+        if len(pct_changes) < 4:
             return {
                 "threshold_pct": fallback_threshold,
                 "is_adaptive": False,
@@ -410,7 +444,7 @@ class OITracker:
             "status": "OK",
             "samples_count": len(cleaned_changes),
             "rms_pct": round(rms, 4),
-            "desc": f"Адаптивний поріг обчислено за {len(cleaned_changes)} хвилинними зрізами (RMS: {rms:.3f}%)"
+            "desc": f"Адаптивний поріг обчислено за {len(cleaned_changes)} хвилинними інтервалами (RMS: {rms:.3f}%)"
         }
 
     def compute_oi_volatility(self, sample_period_seconds: int = 3600) -> float:
@@ -475,12 +509,17 @@ class OITracker:
         is_breakout_down = (level_type == "support" and curr_price < lower_bound)
         is_breakout = is_breakout_up or is_breakout_down
 
-        # Reset latch if price returned to test zone or back on original side of level
-        if in_test_zone or (level_type == "resistance" and curr_price < lower_bound) or (level_type == "support" and curr_price > upper_bound):
+        # Reset latch only after price returns inside test zone (and not breaking out)
+        # or retraces completely to the opposite side of level
+        price_retraced = (
+            (level_type == "resistance" and curr_price < lower_bound) or
+            (level_type == "support" and curr_price > upper_bound)
+        )
+        if (in_test_zone and not is_breakout) or price_retraced:
             if state.has_fired_breakout:
                 state.reset_breakout_latch()
 
-        # Track entry into test zone
+        # Track entry into test zone for a new test period
         if in_test_zone and not state.is_testing and not is_breakout:
             state.is_testing = True
             state.test_start_time = curr_time
@@ -489,6 +528,7 @@ class OITracker:
 
         # Handle Impulse Breakout (breakout occurred without earlier test tracking)
         is_impulse_breakout = False
+        has_pre_baseline = True
         if is_breakout and (state.test_start_time is None or state.test_start_oi is None):
             pre_snap = self._find_pre_breakout_snapshot(level_price, level_type, max_lookback_seconds=300)
             if pre_snap:
@@ -496,13 +536,45 @@ class OITracker:
                 state.test_start_price = pre_snap.price
                 state.test_start_oi = pre_snap.oi
                 is_impulse_breakout = True
+            else:
+                has_pre_baseline = False
+
+        direction = "UP" if curr_price >= (state.test_start_price or curr_price) else "DOWN"
+
+        if is_breakout and not has_pre_baseline:
+            # Cannot determine pre-breakout OI baseline: do not compare with self, do not invent 0.0% delta
+            status = "BREAKOUT (INSUFFICIENT_OI_HISTORY)"
+            interpretation = "Пробій рівня без достатньої попередньої історії OI для оцінки зміни експозиції."
+            return {
+                "level_id": level_id,
+                "level_price": round(level_price, 4),
+                "level_type": level_type,
+                "current_price": round(curr_price, 4),
+                "test_start_price": None,
+                "test_start_oi": None,
+                "breakout_price": round(curr_price, 4),
+                "test_start_time": None,
+                "current_time": curr_time,
+                "duration_seconds": 0.0,
+                "direction": direction,
+                "oi_delta": None,
+                "oi_delta_pct": None,
+                "threshold_pct": threshold_pct,
+                "status": status,
+                "scenario": None,
+                "badge_color": "gray",
+                "interpretation": interpretation,
+                "is_breakout": True,
+                "in_test_zone": False,
+                "is_new_event": False,
+                "is_impulse": True,
+                "is_valid": False
+            }
 
         test_duration_seconds = max(0.0, curr_time - (state.test_start_time or curr_time))
         start_oi = state.test_start_oi if state.test_start_oi and state.test_start_oi > 0 else curr_oi
         oi_delta = curr_oi - start_oi
         oi_delta_pct = ((curr_oi - start_oi) / start_oi * 100.0) if start_oi > 0 else 0.0
-
-        direction = "UP" if curr_price >= (state.test_start_price or curr_price) else "DOWN"
 
         scenario: Optional[str] = None
         status: str = "WATCHING"
@@ -532,7 +604,7 @@ class OITracker:
                     scenario = "SCENARIO_A"
                     badge_color = "green"
                     interpretation = (
-                        f"Пробій рівня на фоні нарощування сукупної відкритої експозиції (+{oi_delta_pct:.2f}%)."
+                        f"Пробій на фоні зростання відкритої експозиції (+{oi_delta_pct:.2f}%)."
                     )
                 elif oi_delta_pct < -threshold_pct:
                     # Scenario B: Breakout with decreasing OI
@@ -540,7 +612,7 @@ class OITracker:
                     scenario = "SCENARIO_B"
                     badge_color = "red"
                     interpretation = (
-                        f"Пробій рівня на фоні скорочення сукупної відкритої експозиції ({oi_delta_pct:.2f}%)."
+                        f"Пробій на фоні скорочення відкритої експозиції ({oi_delta_pct:.2f}%)."
                     )
                 else:
                     # Scenario C: Breakout with neutral OI
@@ -548,7 +620,7 @@ class OITracker:
                     scenario = "SCENARIO_C"
                     badge_color = "gray"
                     interpretation = (
-                        f"Пробій рівня без істотної зміни відкритої експозиції ({oi_delta_pct:+.2f}%)."
+                        f"Пробій без істотної зміни відкритої експозиції ({oi_delta_pct:+.2f}%)."
                     )
         elif in_test_zone:
             # Inside test zone
@@ -558,7 +630,7 @@ class OITracker:
                 scenario = "SCENARIO_D"
                 badge_color = "amber"
                 interpretation = (
-                    f"Тестування рівня зі зростанням відкритої експозиції (+{oi_delta_pct:.2f}%) без розвитку цінового пробою."
+                    f"Тестування рівня зі зростанням експозиції (+{oi_delta_pct:.2f}%) без цінового пробою."
                 )
                 if not state.has_fired_buildup:
                     state.has_fired_buildup = True

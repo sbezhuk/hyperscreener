@@ -21,7 +21,7 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
 }) => {
   const tabs: { id: FormationFilter; label: string }[] = [
     { id: 'NONE', label: 'Без формацій' },
-    { id: 'CASCADE', label: 'Пробій (каскад / рівні)' },
+    { id: 'CASCADE', label: 'Рівні (підтримка / опір)' },
     { id: 'SWEEP', label: 'Відскік / хибний пробій' },
     { id: 'TRENDLINE', label: 'Наклонки' },
     { id: 'FVG', label: 'FVG (Імбаланс)' },
@@ -46,11 +46,10 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
             <button
               key={tab.id}
               onClick={() => onChange(tab.id)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer ${
-                isSelected
+              className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer ${isSelected
                   ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50 shadow-sm'
                   : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-200 hover:bg-slate-100 dark:hover:bg-[#1e2329]'
-              }`}
+                }`}
             >
               {tab.label}
             </button>
@@ -69,11 +68,10 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
               <button
                 key={tf}
                 onClick={() => onToggleTf(tf)}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${
-                  isChecked
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${isChecked
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm'
                     : 'bg-white dark:bg-[#15191e] text-slate-400 dark:text-gray-500 border border-slate-300 dark:border-[#23272e] hover:text-slate-600 dark:hover:text-gray-400 opacity-70'
-                }`}
+                  }`}
                 title={`Фільтрувати рівні за ТФ ${tf}`}
               >
                 {tf.toUpperCase()}
@@ -91,11 +89,10 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
               <button
                 key={opt.value}
                 onClick={() => onMinStrengthChange(opt.value)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
-                  isSelected
+                className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${isSelected
                     ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50'
                     : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-300'
-                }`}
+                  }`}
               >
                 {opt.label}
               </button>

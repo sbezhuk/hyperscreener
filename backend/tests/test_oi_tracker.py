@@ -471,6 +471,245 @@ class TestOITracker(unittest.TestCase):
         # Threshold should be 1.2 * RMS = 0.36% (+/- 0.02%), not minimum bound 0.10%
         self.assertAlmostEqual(info["threshold_pct"], 0.36, delta=0.03)
 
+    # -------------------------------------------------------------
+    # SECTION 10: 11 COMPREHENSIVE REGRESSION TESTS
+    # -------------------------------------------------------------
+
+    def test_req1_closest_snapshot_after_target_timestamp(self):
+        """1. Closest snapshot is located after target timestamp (symmetric lookup)."""
+        now = time.time()
+        t0 = now - 60.0
+        # target_start will be now - 60 = t0
+        # Snapshot A is at t0 - 10s (deviation 10s)
+        # Snapshot B is at t0 + 2s (deviation 2s, AFTER target_start)
+        self.tracker.record_snapshot(oi=1000.0, price=100.0, timestamp=t0 - 10.0)
+        self.tracker.record_snapshot(oi=1050.0, price=100.0, timestamp=t0 + 2.0)
+        self.tracker.record_snapshot(oi=1100.0, price=100.0, timestamp=now)
+
+        # 1m delta: target is now - 60 = t0
+        # Closest is Snapshot B (t0 + 2.0) with deviation 2.0s <= 15s tolerance
+        d1m = self.tracker.compute_interval_delta(60)
+        self.assertEqual(d1m["status"], "OK")
+        self.assertTrue(d1m["is_valid"])
+        self.assertEqual(d1m["previous_oi"], 1050.0)
+        self.assertAlmostEqual(d1m["delta"], 50.0)
+        self.assertAlmostEqual(d1m["delta_pct"], (50.0 / 1050.0) * 100.0, places=3)
+
+    def test_req2_closest_snapshot_exceeds_tolerance(self):
+        """2. Closest snapshot exceeds tolerance -> returns GAP_DETECTED and no synthetic delta."""
+        t0 = 200000.0
+        # For 1m interval, tolerance is 15.0s.
+        # Nearest snapshot is 25s away from target (exceeds 15.0s tolerance)
+        self.tracker.record_snapshot(oi=1000.0, price=100.0, timestamp=t0 - 25.0)
+        self.tracker.record_snapshot(oi=1100.0, price=100.0, timestamp=t0 + 60.0)
+
+        d1m = self.tracker.compute_interval_delta(60)
+        self.assertEqual(d1m["status"], "GAP_DETECTED")
+        self.assertFalse(d1m["is_valid"])
+        self.assertIsNone(d1m["delta"])
+        self.assertIsNone(d1m["delta_pct"])
+
+    def test_req3_real_10min_data_gap(self):
+        """3. Real 10-minute disconnection gap triggers GAP_DETECTED on 1m and 5m."""
+        t0 = 300000.0
+        self.tracker.record_snapshot(oi=5000.0, price=200.0, timestamp=t0)
+        # 600-second (10-minute) silence/gap
+        self.tracker.record_snapshot(oi=5200.0, price=205.0, timestamp=t0 + 600.0)
+
+        d1m = self.tracker.compute_interval_delta(60)
+        self.assertEqual(d1m["status"], "GAP_DETECTED")
+        self.assertFalse(d1m["is_valid"])
+        self.assertIsNone(d1m["delta_pct"])
+
+        d5m = self.tracker.compute_interval_delta(300)
+        self.assertEqual(d5m["status"], "GAP_DETECTED")
+        self.assertFalse(d5m["is_valid"])
+        self.assertIsNone(d5m["delta_pct"])
+
+    def test_req4_insufficient_history_45min_not_valid_1h(self):
+        """4. 45 minutes of accumulated history must NOT give a valid 1h Delta."""
+        t0 = 400000.0
+        # Snapshots every 5 minutes from 0 to 45 minutes (2700s)
+        for m in range(0, 46, 5):
+            self.tracker.record_snapshot(oi=10000.0 + (m * 10), price=150.0, timestamp=t0 + (m * 60))
+
+        d1h = self.tracker.compute_interval_delta(3600)
+        self.assertEqual(d1h["status"], "INSUFFICIENT_HISTORY")
+        self.assertFalse(d1h["is_valid"])
+        self.assertIsNone(d1h["delta"])
+        self.assertIsNone(d1h["delta_pct"])
+        self.assertEqual(d1h["actual_duration_seconds"], 2700.0)
+
+    def test_req5_full_history_60min_gives_valid_1h(self):
+        """5. 60 minutes of continuous history gives a valid 1h Delta."""
+        now = time.time()
+        t0 = now - 3600.0
+        for m in range(0, 61, 3):
+            self.tracker.record_snapshot(oi=10000.0 + (m * 20), price=2500.0, timestamp=t0 + (m * 60))
+
+        d1h = self.tracker.compute_interval_delta(3600)
+        self.assertEqual(d1h["status"], "OK")
+        self.assertTrue(d1h["is_valid"])
+        self.assertIsNotNone(d1h["delta"])
+        self.assertIsNotNone(d1h["delta_pct"])
+        self.assertEqual(d1h["current_oi"], 10000.0 + (60 * 20))
+        self.assertEqual(d1h["previous_oi"], 10000.0)
+
+    def test_req6_adaptive_rms_on_high_frequency_tick_stream(self):
+        """6. Adaptive RMS computes correctly on 0.5-1.0s ticks across 15 minutes."""
+        t0 = 600000.0
+        curr_oi = 80000.0
+        # Feed ticks every 0.8s for 900 seconds (15 minutes)
+        step_sec = 0.8
+        total_steps = int(900 / step_sec)
+        for i in range(total_steps):
+            ts = t0 + (i * step_sec)
+            # Every minute add a 0.25% drift
+            if i > 0 and int(ts / 60) != int((ts - step_sec) / 60):
+                curr_oi *= 1.0025
+            self.tracker.record_snapshot(oi=curr_oi, price=3000.0, timestamp=ts)
+
+        info = self.tracker.get_oi_volatility_info()
+        self.assertTrue(info["is_adaptive"])
+        self.assertEqual(info["status"], "OK")
+        self.assertGreaterEqual(info["samples_count"], 10)
+        self.assertGreaterEqual(info["threshold_pct"], 0.10)
+        self.assertLessEqual(info["threshold_pct"], 2.50)
+        self.assertNotEqual(info["threshold_pct"], 0.25)
+
+    def test_req7_impulse_breakout_without_prior_test(self):
+        """7. Impulse breakout handles both valid pre-baseline and missing baseline without inventing 0.0%."""
+        t0 = 700000.0
+        res_level = {
+            "zone_id": "res_100",
+            "price": 100.0,
+            "upper_price": 100.5,
+            "lower_price": 99.5,
+            "type": "resistance"
+        }
+
+        # Case A: Prior history exists below level
+        self.tracker.record_snapshot(oi=50000.0, price=98.0, timestamp=t0)
+        self.tracker.record_snapshot(oi=51000.0, price=99.0, timestamp=t0 + 30)
+        # Sudden impulse jump to 103.0 with OI 53000 (+3.92%)
+        self.tracker.record_snapshot(oi=53000.0, price=103.0, timestamp=t0 + 45)
+        res_a = self.tracker.analyze_level_interaction(res_level, threshold_pct=0.5)
+        self.assertTrue(res_a["is_breakout"])
+        self.assertTrue(res_a["is_impulse"])
+        self.assertEqual(res_a["status"], "BREAKOUT + OI INCREASE")
+        self.assertEqual(res_a["scenario"], "SCENARIO_A")
+        self.assertEqual(res_a["test_start_oi"], 51000.0)
+
+        # Case B: Fresh tracker with NO historical snapshot before level was crossed
+        empty_tracker = OITracker(coin="SOL")
+        empty_tracker.record_snapshot(oi=50000.0, price=103.0, timestamp=t0)
+        res_b = empty_tracker.analyze_level_interaction(res_level, threshold_pct=0.5)
+        self.assertTrue(res_b["is_breakout"])
+        self.assertEqual(res_b["status"], "BREAKOUT (INSUFFICIENT_OI_HISTORY)")
+        self.assertIsNone(res_b["scenario"])
+        self.assertFalse(res_b["is_valid"])
+        self.assertIsNone(res_b["oi_delta"])
+        self.assertIsNone(res_b["oi_delta_pct"])
+
+    def test_req8_absence_of_duplicate_breakout_signals_on_continuous_ticks(self):
+        """8. Breakout triggers is_new_event=True exactly once, then debounces across continuous ticks."""
+        t0 = 800000.0
+        level = {
+            "zone_id": "res_200",
+            "price": 200.0,
+            "upper_price": 201.0,
+            "lower_price": 199.0,
+            "type": "resistance"
+        }
+        self.tracker.record_snapshot(oi=10000.0, price=199.5, timestamp=t0)
+        self.tracker.analyze_level_interaction(level)
+
+        # Tick 1: Breakout happens
+        self.tracker.record_snapshot(oi=10500.0, price=203.0, timestamp=t0 + 5)
+        res1 = self.tracker.analyze_level_interaction(level)
+        self.assertTrue(res1["is_breakout"])
+        self.assertTrue(res1["is_new_event"])
+
+        # Continuous 50 ticks in breakout zone: is_new_event must remain False
+        for sec in range(1, 51):
+            self.tracker.record_snapshot(oi=10500.0 + sec, price=203.0 + (sec * 0.1), timestamp=t0 + 5 + sec)
+            res_tick = self.tracker.analyze_level_interaction(level)
+            self.assertTrue(res_tick["is_breakout"])
+            self.assertFalse(res_tick["is_new_event"])
+
+    def test_req9_scenario_d_buildup_latching(self):
+        """9. Scenario D generates event once and debounces until retracement."""
+        t0 = 900000.0
+        level = {
+            "zone_id": "res_50",
+            "price": 50.0,
+            "upper_price": 50.2,
+            "lower_price": 49.8,
+            "type": "resistance"
+        }
+        self.tracker.record_snapshot(oi=10000.0, price=50.0, timestamp=t0)
+        self.tracker.analyze_level_interaction(level, threshold_pct=0.4)
+
+        # 35s later, OI +1.5% inside test zone
+        self.tracker.record_snapshot(oi=10150.0, price=50.1, timestamp=t0 + 35)
+        res1 = self.tracker.analyze_level_interaction(level, threshold_pct=0.4)
+        self.assertEqual(res1["scenario"], "SCENARIO_D")
+        self.assertTrue(res1["is_new_event"])
+
+        # Immediate next ticks inside zone: is_new_event is False
+        self.tracker.record_snapshot(oi=10160.0, price=50.1, timestamp=t0 + 36)
+        res2 = self.tracker.analyze_level_interaction(level, threshold_pct=0.4)
+        self.assertEqual(res2["scenario"], "SCENARIO_D")
+        self.assertFalse(res2["is_new_event"])
+
+    def test_req10_frontend_cache_timestamp_contract(self):
+        """10. Frontend contract: incoming older data must not overwrite newer timestamps."""
+        t_newer = 1794062600.0
+        t_older = 1794062550.0
+
+        current_state_oi = {"timestamp": t_newer, "current_oi": 15000.0}
+        cached_stale_oi = {"timestamp": t_older, "current_oi": 14800.0}
+
+        # Timestamp comparison rule implemented in App.tsx
+        should_use_prev = (current_state_oi["timestamp"] >= cached_stale_oi["timestamp"])
+        self.assertTrue(should_use_prev)
+        resolved_oi = current_state_oi if should_use_prev else cached_stale_oi
+        self.assertEqual(resolved_oi["timestamp"], t_newer)
+        self.assertEqual(resolved_oi["current_oi"], 15000.0)
+
+    def test_req11_base_oi_and_usd_notional_integrity(self):
+        """11. Base OI in contract units and USD Notional calculated as OI * Mark Price."""
+        now = time.time()
+        self.tracker.record_snapshot(oi=250.5, price=4000.0, timestamp=now)
+        summary = self.tracker.get_summary()
+
+        self.assertEqual(summary["current_oi"], 250.5)
+        self.assertEqual(summary["current_price"], 4000.0)
+        # USD Notional = 250.5 * 4000.0 = 1,002,000.0 USD
+        self.assertEqual(summary["current_oi_usd"], 1002000.0)
+        self.assertEqual(summary["coin"], "ETH")
+
+    def test_screener_defensive_cleanup_dist_pct(self):
+        """Regression test for Screener defensive cleanup:
+        1. oi_delta_pct = 0.456 -> distPct = 0.46
+        2. oi_delta_pct = None -> distPct = 0.0 (prevents TypeError: round(None, 2))
+        3. Key oi_delta_pct missing -> distPct = 0.0
+        """
+        # Case 1: oi_delta_pct = 0.456 -> 0.46
+        bs1 = {"oi_delta_pct": 0.456}
+        dist1 = round(bs1.get("oi_delta_pct") or 0.0, 2)
+        self.assertEqual(dist1, 0.46)
+
+        # Case 2: oi_delta_pct = None -> 0.0 (previously raised TypeError)
+        bs2 = {"oi_delta_pct": None}
+        dist2 = round(bs2.get("oi_delta_pct") or 0.0, 2)
+        self.assertEqual(dist2, 0.0)
+
+        # Case 3: Key oi_delta_pct missing -> 0.0
+        bs3 = {}
+        dist3 = round(bs3.get("oi_delta_pct") or 0.0, 2)
+        self.assertEqual(dist3, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

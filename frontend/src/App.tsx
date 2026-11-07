@@ -102,7 +102,18 @@ export function App() {
 
     // Check if we have fresh cached data (< 60 seconds old)
     if (cachedEntry) {
-      setAnalysis(cachedEntry.data);
+      setAnalysis((prev) => {
+        // If we currently have fresher live OI for this same coin, preserve it to prevent GAP/stale flash
+        const prevOi = prev?.coin?.toUpperCase() === cleanCoin ? prev.oi : undefined;
+        const cachedOi = cachedEntry.data.oi;
+        const shouldUsePrevOi =
+          prevOi &&
+          (!cachedOi || (prevOi.timestamp ?? 0) >= (cachedOi.timestamp ?? 0));
+        return {
+          ...cachedEntry.data,
+          oi: shouldUsePrevOi ? prevOi : cachedOi,
+        };
+      });
       if (now - cachedEntry.timestamp < 60000) {
         setIsLoading(false);
         return;
@@ -181,7 +192,17 @@ export function App() {
             cleanCoin === selectedCoinRef.current.toUpperCase() &&
             cleanTf === timeframeRef.current.toLowerCase()
           ) {
-            setAnalysis(data.data);
+            setAnalysis((prev) => {
+              const prevOi = prev?.coin?.toUpperCase() === cleanCoin ? prev.oi : undefined;
+              const incomingOi = data.data.oi;
+              const shouldUsePrevOi =
+                prevOi &&
+                (!incomingOi || (prevOi.timestamp ?? 0) >= (incomingOi.timestamp ?? 0));
+              return {
+                ...data.data,
+                oi: shouldUsePrevOi ? prevOi : incomingOi,
+              };
+            });
           }
           // Store in client-side cache
           analysisCacheRef.current.set(cacheKey, {
@@ -500,12 +521,28 @@ export function App() {
             if (data.coin?.toUpperCase() === currentCoin) {
               setAnalysis((prev) => {
                 if (!prev || prev.coin?.toUpperCase() !== currentCoin) return prev;
+                // Discard stale ticks if previous timestamp is strictly newer
+                const prevTs = prev.oi?.timestamp ?? 0;
+                const newTs = data.oi_summary?.timestamp ?? 0;
+                if (newTs < prevTs && newTs > 0) return prev;
+
                 return {
                   ...prev,
                   isLiveTick: false,
                   oi: data.oi_summary || prev.oi,
                 };
               });
+
+              // Keep all cache entries for this coin updated with fresh OI
+              // so subsequent timeframe switches don't revert to stale OI or trigger false GAP flashes
+              for (const [key, entry] of analysisCacheRef.current.entries()) {
+                if (key.startsWith(`${currentCoin}:`) && entry.data) {
+                  entry.data = {
+                    ...entry.data,
+                    oi: data.oi_summary,
+                  };
+                }
+              }
             }
           }
         } catch (err) {

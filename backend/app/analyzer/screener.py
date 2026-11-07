@@ -211,7 +211,7 @@ async def analyze_coin_data(
             "direction": "LONG" if bs["direction"] == "UP" else "SHORT",
             "desc": bs["interpretation"],
             "price": bs["breakout_price"] or bs["current_price"],
-            "distPct": round(bs.get("oi_delta_pct", 0.0), 2),
+            "distPct": round(bs.get("oi_delta_pct") or 0.0, 2),
             "time": event_time,
             "scenario": bs.get("scenario"),
             "badgeColor": bs.get("badge_color")

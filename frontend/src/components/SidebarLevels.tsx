@@ -163,7 +163,16 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                   {isGap ? (
                     'GAP'
                   ) : isNoHist || d?.delta_pct === null || d?.delta_pct === undefined ? (
-                    '...'
+                    d?.actual_duration_seconds && d?.interval_seconds && d.actual_duration_seconds > 60 ? (
+                      <span
+                        className="text-[9px] font-normal"
+                        title={`Накопичення історії: ${Math.round(d.actual_duration_seconds / 60)}хв з ${Math.round(d.interval_seconds / 60)}хв`}
+                      >
+                        {Math.round(d.actual_duration_seconds / 60)}/{Math.round(d.interval_seconds / 60)}m
+                      </span>
+                    ) : (
+                      '...'
+                    )
                   ) : (
                     formatOiDeltaPct(d.delta_pct)
                   )}
@@ -202,7 +211,15 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     </span>
                     <span className="text-[10px] truncate">{sig.status}</span>
                   </div>
-                  <span className="font-mono text-[10px] font-bold">
+                  <span
+                    className={`font-mono text-[10px] font-bold ${
+                      sig.oi_delta_pct && sig.oi_delta_pct > 0
+                        ? 'text-[#0ecb81]'
+                        : sig.oi_delta_pct && sig.oi_delta_pct < 0
+                        ? 'text-[#f6465d]'
+                        : 'text-slate-500 dark:text-gray-400'
+                    }`}
+                  >
                     {formatOiDeltaPct(sig.oi_delta_pct)}
                   </span>
                 </div>
