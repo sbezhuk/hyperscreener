@@ -272,4 +272,24 @@ export interface ScreenerItem {
   oiDeltaPct5m?: number;
   oiStatus?: string;
   oiColor?: string;
+  oiDeltaStatus5m?: string;
+  oiThresholdPct?: number;
+}
+
+/**
+ * Formats Open Interest percentage delta with 3 decimal places precision (e.g. +0.003%, -0.016%, +0.117%).
+ * - Preserves exact positive/negative sign
+ * - Does not collapse small non-zero numbers into zero
+ * - Never substitutes null or undefined with 0.000%
+ * - Returns 0.000% only if value truly equals 0 after 3-decimal rounding
+ */
+export function formatOiDeltaPct(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined || Number.isNaN(pct)) {
+    return '...';
+  }
+  const formatted = pct.toFixed(3);
+  if (formatted === '0.000' || formatted === '-0.000') {
+    return '0.000%';
+  }
+  return pct > 0 ? `+${formatted}%` : `${formatted}%`;
 }

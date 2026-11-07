@@ -242,6 +242,10 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
     coins_meta = await hl_client.get_meta_and_contexts()
     target_coins = [c["name"] for c in coins_meta[:top_n]]
 
+    # Sync monitored coins so newly listed perpetuals are tracked
+    if coins_meta:
+        asyncio.create_task(hl_ws_manager.update_monitored_coins([c["name"] for c in coins_meta]))
+
     sem = asyncio.Semaphore(4)
     async def fetch_one(coin):
         async with sem:
@@ -268,7 +272,9 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
                 "oiDelta5m": d5.get("delta", 0.0),
                 "oiDeltaPct5m": d5.get("delta_pct", 0.0),
                 "oiStatus": oi_info.get("oi_status", "NEUTRAL"),
-                "oiColor": oi_info.get("oi_color", "gray")
+                "oiColor": oi_info.get("oi_color", "gray"),
+                "oiDeltaStatus5m": d5.get("status", "OK"),
+                "oiThresholdPct": oi_info.get("volatility_threshold_pct", 0.25)
             })
 
     screener_results.sort(key=lambda x: x["signalsCount"], reverse=True)

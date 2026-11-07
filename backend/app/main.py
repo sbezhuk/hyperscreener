@@ -116,6 +116,7 @@ async def get_ws_status():
             {"coin": coin, "interval": interval}
             for coin, interval in hl_ws_manager._subscribed_topics
         ],
+        "monitored_oi_coins_count": len(hl_ws_manager._monitored_oi_coins),
         "active_clients_count": len(hl_ws_manager._active_clients)
     }
 

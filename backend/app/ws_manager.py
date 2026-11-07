@@ -63,6 +63,9 @@ class HyperliquidWSManager:
         self._subscribed_topics: Set[Tuple[str, str]] = set()
         # Active coin asset context subscriptions on Hyperliquid WS: set of coin symbols
         self._subscribed_coins: Set[str] = set()
+        # Monitored screener coins for continuous background OI tracking
+        self._monitored_oi_coins: Set[str] = set()
+        self._oi_sync_task: Optional[asyncio.Task] = None
 
         # Levels cache for live sweep checking: (coin, interval) -> { "resistances": [...], "supports": [...] }
         self._levels_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -87,6 +90,7 @@ class HyperliquidWSManager:
 
         self._running = True
         self._ws_task = asyncio.create_task(self._connection_loop())
+        self._oi_sync_task = asyncio.create_task(self._periodic_oi_coins_sync())
 
     async def stop(self):
         """Stops background tasks and closes connection cleanly."""
@@ -99,6 +103,13 @@ class HyperliquidWSManager:
             except asyncio.CancelledError:
                 pass
         self._ws_task = None
+        if self._oi_sync_task and not self._oi_sync_task.done():
+            self._oi_sync_task.cancel()
+            try:
+                await self._oi_sync_task
+            except asyncio.CancelledError:
+                pass
+        self._oi_sync_task = None
         await self.reconnect_mgr.manual_disconnect(reason="Service shutdown")
 
     async def manual_disconnect(self):
@@ -202,6 +213,10 @@ class HyperliquidWSManager:
                     logger.warning(f"Error sending unsubscribe: {e}")
 
     async def _check_and_unsubscribe_coin_if_unused(self, coin: str):
+        # Do not unsubscribe if coin is actively monitored for background screener OI tracking
+        if coin in self._monitored_oi_coins:
+            return
+
         has_coin_subscribers = any(
             any(sub_coin == coin for sub_coin, _ in subs)
             for subs in self._client_subs.values()
@@ -222,6 +237,9 @@ class HyperliquidWSManager:
                     logger.warning(f"Error sending unsubscribe activeAssetCtx: {e}")
 
     async def _ensure_hl_coin_subscribed(self, coin: str):
+        coin = coin.upper()
+        # Ensure independent OITracker exists
+        oi_manager.get_tracker(coin)
         if coin not in self._subscribed_coins:
             self._subscribed_coins.add(coin)
             if self._hl_ws and self.is_connected:
@@ -232,6 +250,97 @@ class HyperliquidWSManager:
                         "coin": coin
                     }
                 }
+                try:
+                    await self._hl_ws.send(json.dumps(sub_msg))
+                    logger.info(f"Subscribed to Hyperliquid WS activeAssetCtx: {coin}")
+                except Exception as e:
+                    logger.warning(f"Error sending subscribe activeAssetCtx: {e}")
+
+    async def update_monitored_coins(self, coins: List[str]):
+        """
+        Synchronizes the set of active perpetual coins monitored for continuous OI tracking.
+        Adds new coins, removes delisted coins, and maintains subscriptions.
+        """
+        new_set = {c.upper() for c in coins if c}
+        added = new_set - self._monitored_oi_coins
+        removed = self._monitored_oi_coins - new_set
+
+        if not added and not removed:
+            return
+
+        # 1. Handle delisted / removed coins
+        for coin in removed:
+            self._monitored_oi_coins.discard(coin)
+            has_chart_sub = any(
+                any(sub_coin == coin for sub_coin, _ in subs)
+                for subs in self._client_subs.values()
+            )
+            if not has_chart_sub and coin in self._subscribed_coins:
+                self._subscribed_coins.remove(coin)
+                if self._hl_ws and self.is_connected:
+                    try:
+                        await self._hl_ws.send(json.dumps({
+                            "method": "unsubscribe",
+                            "subscription": {"type": "activeAssetCtx", "coin": coin}
+                        }))
+                    except Exception as e:
+                        logger.warning(f"Error unsubscribing removed coin {coin}: {e}")
+
+        # 2. Handle newly added coins
+        newly_subscribed = []
+        for coin in added:
+            self._monitored_oi_coins.add(coin)
+            # Ensure independent OITracker is initialized
+            oi_manager.get_tracker(coin)
+            if coin not in self._subscribed_coins:
+                self._subscribed_coins.add(coin)
+                newly_subscribed.append(coin)
+
+        # Batch send subscriptions if connected
+        if newly_subscribed and self._hl_ws and self.is_connected:
+            for i, coin in enumerate(newly_subscribed):
+                try:
+                    await self._hl_ws.send(json.dumps({
+                        "method": "subscribe",
+                        "subscription": {"type": "activeAssetCtx", "coin": coin}
+                    }))
+                    if (i + 1) % 50 == 0:
+                        await asyncio.sleep(0.02)
+                except Exception as e:
+                    logger.warning(f"Error subscribing new coin {coin}: {e}")
+            logger.info(f"Subscribed {len(newly_subscribed)} new coins for continuous background OI tracking.")
+
+    async def sync_all_screener_coins(self):
+        """
+        Discovers all active perpetual contracts on Hyperliquid and ensures
+        continuous OI tracking without UI dependencies.
+        """
+        try:
+            meta = await hl_client.get_meta_and_contexts()
+            active_coin_names = [c["name"] for c in meta if c.get("name")]
+            await self.update_monitored_coins(active_coin_names)
+        except Exception as e:
+            logger.warning(f"Failed to sync screener coins for OI monitoring: {e}")
+
+    async def _periodic_oi_coins_sync(self):
+        """
+        Background task: runs immediately on startup, then periodically every 300 seconds (5 min)
+        to catch newly listed perpetual contracts and maintain subscriptions.
+        """
+        # Brief pause to let initial WS connect
+        await asyncio.sleep(1.0)
+        while self._running:
+            try:
+                await self.sync_all_screener_coins()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Error in periodic OI sync: {e}")
+
+            try:
+                await asyncio.sleep(300.0)
+            except asyncio.CancelledError:
+                break
                 try:
                     await self._hl_ws.send(json.dumps(sub_msg))
                     logger.info(f"Subscribed to Hyperliquid WS activeAssetCtx: {coin}")
@@ -299,7 +408,9 @@ class HyperliquidWSManager:
                             await ws.send(json.dumps(sub_msg))
                             logger.info(f"Restored subscription candle: {coin} {interval}")
 
-                        for coin in list(self._subscribed_coins):
+                        coins_to_restore = list(self._subscribed_coins | self._monitored_oi_coins)
+                        for i, coin in enumerate(coins_to_restore):
+                            self._subscribed_coins.add(coin)
                             sub_ctx = {
                                 "method": "subscribe",
                                 "subscription": {
@@ -308,7 +419,9 @@ class HyperliquidWSManager:
                                 }
                             }
                             await ws.send(json.dumps(sub_ctx))
-                            logger.info(f"Restored subscription activeAssetCtx: {coin}")
+                            if (i + 1) % 50 == 0:
+                                await asyncio.sleep(0.02)
+                        logger.info(f"Restored {len(coins_to_restore)} activeAssetCtx subscriptions upon reconnection.")
 
                         # Start heartbeat watchdog (pings every 20s, checks silent timeout at 45s)
                         if self._watchdog_task and not self._watchdog_task.done():
@@ -496,6 +609,15 @@ class HyperliquidWSManager:
 
             if oi > 0 and px > 0:
                 oi_manager.record_tick(coin=coin, oi=oi, price=px)
+
+                # Only format full summary and broadcast to frontend if at least one client is watching this coin
+                has_subscribers = any(
+                    any(sub_coin == coin for sub_coin, _ in subs)
+                    for subs in self._client_subs.values()
+                )
+                if not has_subscribers:
+                    return
+
                 levels = self._get_all_levels_for_coin(coin)
                 oi_summary = oi_manager.get_coin_oi_summary(coin=coin, levels=levels)
 

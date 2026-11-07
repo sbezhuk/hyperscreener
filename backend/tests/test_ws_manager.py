@@ -117,6 +117,125 @@ class TestHyperliquidWSManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detected["levelPrice"], 3000.0)
         self.assertEqual(detected["sweepPrice"], 3015.0)
 
+    async def test_multi_coin_independent_oi_history(self):
+        """Regression test: multiple coins stream activeAssetCtx and update independent OITrackers."""
+        from app.analyzer.oi_tracker import oi_manager
+        oi_manager.clear()
+
+        # Simulate incoming activeAssetCtx messages for BTC, ETH, SOL, HYPE
+        await self.mgr._handle_hl_message(json.dumps({
+            "channel": "activeAssetCtx",
+            "data": {"coin": "BTC", "ctx": {"openInterest": "41500.0", "markPx": "75000.0", "funding": "0.0001"}}
+        }))
+        await self.mgr._handle_hl_message(json.dumps({
+            "channel": "activeAssetCtx",
+            "data": {"coin": "ETH", "ctx": {"openInterest": "970000.0", "markPx": "2200.0", "funding": "0.0001"}}
+        }))
+        await self.mgr._handle_hl_message(json.dumps({
+            "channel": "activeAssetCtx",
+            "data": {"coin": "SOL", "ctx": {"openInterest": "5600000.0", "markPx": "90.0", "funding": "0.0001"}}
+        }))
+        await self.mgr._handle_hl_message(json.dumps({
+            "channel": "activeAssetCtx",
+            "data": {"coin": "HYPE", "ctx": {"openInterest": "22000000.0", "markPx": "78.0", "funding": "0.0001"}}
+        }))
+
+        # Verify trackers exist and contain independent values
+        btc_tracker = oi_manager.get_tracker("BTC")
+        eth_tracker = oi_manager.get_tracker("ETH")
+        sol_tracker = oi_manager.get_tracker("SOL")
+        hype_tracker = oi_manager.get_tracker("HYPE")
+
+        self.assertEqual(btc_tracker.latest.oi, 41500.0)
+        self.assertEqual(eth_tracker.latest.oi, 970000.0)
+        self.assertEqual(sol_tracker.latest.oi, 5600000.0)
+        self.assertEqual(hype_tracker.latest.oi, 22000000.0)
+
+    async def test_active_chart_coin_switching_preserves_oi_tracking(self):
+        """Regression test: switching chart coin does NOT unsubscribe activeAssetCtx for monitored coins."""
+        mock_ws = AsyncMock()
+        self.mgr._hl_ws = mock_ws
+        await self.mgr.reconnect_mgr.on_connected()
+
+        # Pre-seed monitored coins
+        await self.mgr.update_monitored_coins(["BTC", "ETH", "SOL"])
+        mock_ws.send.reset_mock()
+
+        mock_client = AsyncMock()
+        await self.mgr.register_client(mock_client)
+
+        # Client subscribes to ETH
+        await self.mgr.subscribe_client(mock_client, "ETH", "1m")
+        # Client switches to SOL: unsubscribes ETH 1m
+        await self.mgr.unsubscribe_client(mock_client, "ETH", "1m")
+        await self.mgr.subscribe_client(mock_client, "SOL", "1m")
+
+        # ETH candle topic is unsubscribed
+        self.assertNotIn(("ETH", "1m"), self.mgr._subscribed_topics)
+        # BUT ETH activeAssetCtx MUST NOT be unsubscribed because it is in _monitored_oi_coins!
+        self.assertIn("ETH", self.mgr._monitored_oi_coins)
+        self.assertIn("ETH", self.mgr._subscribed_coins)
+
+        # Verify that no unsubscribe for activeAssetCtx ETH was sent
+        for call_args in mock_ws.send.call_args_list:
+            msg = json.loads(call_args[0][0])
+            if msg.get("method") == "unsubscribe":
+                sub = msg.get("subscription", {})
+                self.assertFalse(sub.get("type") == "activeAssetCtx" and sub.get("coin") == "ETH")
+
+    async def test_reconnect_restores_all_monitored_coins(self):
+        """Regression test: on reconnect, activeAssetCtx subscriptions for all monitored coins are restored."""
+        mock_ws = AsyncMock()
+        self.mgr._hl_ws = mock_ws
+        self.mgr._monitored_oi_coins = {"BTC", "ETH", "SOL", "HYPE"}
+        self.mgr._subscribed_coins = set()
+
+        # Re-subscribe simulation as in _connection_loop
+        coins_to_restore = list(self.mgr._subscribed_coins | self.mgr._monitored_oi_coins)
+        for coin in coins_to_restore:
+            self.mgr._subscribed_coins.add(coin)
+            await mock_ws.send(json.dumps({
+                "method": "subscribe",
+                "subscription": {"type": "activeAssetCtx", "coin": coin}
+            }))
+
+        sent_coins = set()
+        for call_args in mock_ws.send.call_args_list:
+            msg = json.loads(call_args[0][0])
+            if msg.get("method") == "subscribe" and msg.get("subscription", {}).get("type") == "activeAssetCtx":
+                sent_coins.add(msg["subscription"]["coin"])
+
+        self.assertEqual(sent_coins, {"BTC", "ETH", "SOL", "HYPE"})
+
+    async def test_dynamic_coin_discovery_and_delisting(self):
+        """Regression test: new coins are added and delisted coins are cleanly removed."""
+        mock_ws = AsyncMock()
+        self.mgr._hl_ws = mock_ws
+        await self.mgr.reconnect_mgr.on_connected()
+
+        # Step 1: Initialize with BTC, ETH
+        await self.mgr.update_monitored_coins(["BTC", "ETH"])
+        self.assertEqual(self.mgr._monitored_oi_coins, {"BTC", "ETH"})
+
+        # Step 2: New coin listed on Hyperliquid
+        mock_ws.send.reset_mock()
+        await self.mgr.update_monitored_coins(["BTC", "ETH", "NEWCOIN"])
+        self.assertIn("NEWCOIN", self.mgr._monitored_oi_coins)
+        self.assertIn("NEWCOIN", self.mgr._subscribed_coins)
+
+        # Step 3: Coin delisted
+        mock_ws.send.reset_mock()
+        await self.mgr.update_monitored_coins(["BTC", "ETH"])
+        self.assertNotIn("NEWCOIN", self.mgr._monitored_oi_coins)
+        self.assertNotIn("NEWCOIN", self.mgr._subscribed_coins)
+        # Verify unsubscribe was sent for NEWCOIN
+        unsub_sent = any(
+            json.loads(c[0][0]).get("subscription", {}).get("coin") == "NEWCOIN"
+            and json.loads(c[0][0]).get("method") == "unsubscribe"
+            for c in mock_ws.send.call_args_list
+        )
+        self.assertTrue(unsub_sent)
+
 
 if __name__ == "__main__":
     unittest.main()

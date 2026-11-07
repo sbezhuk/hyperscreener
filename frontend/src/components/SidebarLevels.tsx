@@ -1,5 +1,5 @@
 import React from 'react';
-import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData } from '../types';
+import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData, formatOiDeltaPct } from '../types';
 import { Activity, BarChart2 } from 'lucide-react';
 
 interface SidebarLevelsProps {
@@ -162,12 +162,10 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 <span className="font-bold">
                   {isGap ? (
                     'GAP'
-                  ) : isNoHist ? (
+                  ) : isNoHist || d?.delta_pct === null || d?.delta_pct === undefined ? (
                     '...'
-                  ) : pct > 0 ? (
-                    `+${pct.toFixed(1)}%`
                   ) : (
-                    `${pct.toFixed(1)}%`
+                    formatOiDeltaPct(d.delta_pct)
                   )}
                 </span>
               </div>
@@ -205,7 +203,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     <span className="text-[10px] truncate">{sig.status}</span>
                   </div>
                   <span className="font-mono text-[10px] font-bold">
-                    {sig.oi_delta_pct > 0 ? `+${sig.oi_delta_pct.toFixed(2)}%` : `${sig.oi_delta_pct.toFixed(2)}%`}
+                    {formatOiDeltaPct(sig.oi_delta_pct)}
                   </span>
                 </div>
                 <div className="text-[10px] leading-tight opacity-90">{sig.interpretation}</div>

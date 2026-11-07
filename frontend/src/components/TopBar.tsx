@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timeframe, ConnectionState, WSConnectionDetails, OIData } from '../types';
+import { Timeframe, ConnectionState, WSConnectionDetails, OIData, formatOiDeltaPct } from '../types';
 import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTheme, ThemePreference } from '../context/ThemeContext';
 
@@ -136,7 +136,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Real-time Open Interest Delta Badge */}
         {oiData && oiData.current_oi !== null && (
           <div
-            title={`Hyperliquid OI: ${oiData.current_oi.toLocaleString()} ${coin} (${oiData.current_oi_usd ? '$' + (oiData.current_oi_usd >= 1e9 ? (oiData.current_oi_usd / 1e9).toFixed(2) + 'B' : (oiData.current_oi_usd / 1e6).toFixed(2) + 'M') : ''}) | 1m: ${oiData.deltas?.['1m']?.delta_pct?.toFixed(2)}% | 5m: ${oiData.deltas?.['5m']?.delta_pct?.toFixed(2)}% | 15m: ${oiData.deltas?.['15m']?.delta_pct?.toFixed(2)}% | 1h: ${oiData.deltas?.['1h']?.delta_pct?.toFixed(2)}%`}
+            title={`Hyperliquid OI: ${oiData.current_oi.toLocaleString()} ${coin} (${oiData.current_oi_usd ? '$' + (oiData.current_oi_usd >= 1e9 ? (oiData.current_oi_usd / 1e9).toFixed(2) + 'B' : oiData.current_oi_usd >= 1e6 ? (oiData.current_oi_usd / 1e6).toFixed(2) + 'M' : (oiData.current_oi_usd / 1e3).toFixed(1) + 'K') : ''}) | 1m: ${formatOiDeltaPct(oiData.deltas?.['1m']?.delta_pct)} | 5m: ${formatOiDeltaPct(oiData.deltas?.['5m']?.delta_pct)} | 15m: ${formatOiDeltaPct(oiData.deltas?.['15m']?.delta_pct)} | 1h: ${formatOiDeltaPct(oiData.deltas?.['1h']?.delta_pct)}`}
             className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] text-xs font-mono ml-2 select-none"
           >
             <span className="text-slate-400 dark:text-gray-500 font-sans text-[11px] font-medium">OI:</span>
@@ -183,7 +183,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 >
                   {isGap ? (
                     'GAP'
-                  ) : isNoHist ? (
+                  ) : isNoHist || d5?.delta_pct === null || d5?.delta_pct === undefined ? (
                     '...'
                   ) : (
                     <>
@@ -194,7 +194,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                       ) : (
                         <Minus className="w-3 h-3" />
                       )}
-                      {pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`} (5m)
+                      {formatOiDeltaPct(d5.delta_pct)} (5m)
                     </>
                   )}
                 </span>

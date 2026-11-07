@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScreenerItem, CoinMeta } from '../types';
+import { ScreenerItem, CoinMeta, formatOiDeltaPct } from '../types';
 import { X, Search, Layers, Activity } from 'lucide-react';
 
 interface ScreenerModalProps {
@@ -146,19 +146,27 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                         <span>·</span>
                         <span>{item.resistancesCount} опорів / {item.supportsCount} підтримок</span>
                       </div>
-                      {item.oiDeltaPct5m !== undefined && (
+                      {item.oiDeltaPct5m !== undefined && item.oiDeltaPct5m !== null && (
                         <div className="flex items-center gap-1 text-[10px] font-mono">
                           <span className="text-slate-400 dark:text-gray-500 font-sans">OI 5m:</span>
                           <span
                             className={`font-bold px-1 rounded ${
-                              item.oiColor === 'green'
+                              item.oiDeltaStatus5m === 'GAP_DETECTED'
+                                ? 'text-amber-500 bg-amber-500/10'
+                                : item.oiDeltaStatus5m === 'INSUFFICIENT_HISTORY'
+                                ? 'text-slate-400 bg-slate-500/10'
+                                : item.oiColor === 'green'
                                 ? 'text-[#0ecb81] bg-emerald-500/10'
                                 : item.oiColor === 'red'
                                 ? 'text-[#f6465d] bg-rose-500/10'
                                 : 'text-slate-500 dark:text-gray-400 bg-slate-500/10'
                             }`}
                           >
-                            {item.oiDeltaPct5m > 0 ? `+${item.oiDeltaPct5m.toFixed(2)}%` : `${item.oiDeltaPct5m.toFixed(2)}%`}
+                            {item.oiDeltaStatus5m === 'GAP_DETECTED'
+                              ? 'GAP'
+                              : item.oiDeltaStatus5m === 'INSUFFICIENT_HISTORY'
+                              ? '...'
+                              : formatOiDeltaPct(item.oiDeltaPct5m)}
                           </span>
                         </div>
                       )}
