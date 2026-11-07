@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Dict, Any
 from ..hyperliquid import hl_client
 from ..ws_manager import hl_ws_manager
+from .oi_tracker import oi_manager
 from .levels import analyze_levels
 from .mtf_levels import mtf_levels_manager
 from .fvg import detect_fvgs
@@ -195,6 +196,27 @@ async def analyze_coin_data(
         supports=levels_data.get("supports", [])
     )
 
+    # 6. Open Interest (OI) Analysis & Level Breakout Confirmation
+    active_all_levels = levels_data.get("resistances", []) + levels_data.get("supports", [])
+    oi_summary = oi_manager.get_coin_oi_summary(coin=coin, levels=active_all_levels)
+
+    for bs in oi_summary.get("breakout_signals", []):
+        event_time = int(bs.get("test_start_time") or bs.get("current_time", 0))
+        signals.append({
+            "id": f"oi-{bs['level_id']}-{event_time}",
+            "coin": coin,
+            "interval": interval,
+            "category": "sweep" if bs.get("scenario") in ["SCENARIO_B"] else "cascade",
+            "title": bs["status"],
+            "direction": "LONG" if bs["direction"] == "UP" else "SHORT",
+            "desc": bs["interpretation"],
+            "price": bs["breakout_price"] or bs["current_price"],
+            "distPct": round(bs.get("oi_delta_pct", 0.0), 2),
+            "time": event_time,
+            "scenario": bs.get("scenario"),
+            "badgeColor": bs.get("badge_color")
+        })
+
     return {
         "coin": coin,
         "interval": interval,
@@ -207,7 +229,8 @@ async def analyze_coin_data(
         "fvgConfluences": fvg_confluences,
         "liquidity": liquidity_data,
         "structure": structure_data,
-        "signals": signals
+        "signals": signals,
+        "oi": oi_summary
     }
 
 
@@ -231,6 +254,8 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
     screener_results = []
     for res in results:
         if isinstance(res, dict) and res.get("signals"):
+            oi_info = res.get("oi", {})
+            d5 = oi_info.get("deltas", {}).get("5m", {})
             screener_results.append({
                 "coin": res["coin"],
                 "currentPrice": res["currentPrice"],
@@ -238,7 +263,12 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
                 "signals": res["signals"],
                 "signalsCount": len(res["signals"]),
                 "resistancesCount": len(res["levels"]["resistances"]),
-                "supportsCount": len(res["levels"]["supports"])
+                "supportsCount": len(res["levels"]["supports"]),
+                "openInterest": oi_info.get("current_oi", 0.0),
+                "oiDelta5m": d5.get("delta", 0.0),
+                "oiDeltaPct5m": d5.get("delta_pct", 0.0),
+                "oiStatus": oi_info.get("oi_status", "NEUTRAL"),
+                "oiColor": oi_info.get("oi_color", "gray")
             })
 
     screener_results.sort(key=lambda x: x["signalsCount"], reverse=True)

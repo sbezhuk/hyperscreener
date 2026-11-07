@@ -1,6 +1,6 @@
 import React from 'react';
-import { LevelItem, SignalItem, AnalysisData, FormationFilter } from '../types';
-import { Activity } from 'lucide-react';
+import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData } from '../types';
+import { Activity, BarChart2 } from 'lucide-react';
 
 interface SidebarLevelsProps {
   resistances: LevelItem[];
@@ -11,6 +11,7 @@ interface SidebarLevelsProps {
   fundingRate?: number;
   activeFormation: FormationFilter;
   onSelectSignal?: (sig: SignalItem) => void;
+  oiData?: OIData;
 }
 
 export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
@@ -22,6 +23,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   fundingRate,
   activeFormation,
   onSelectSignal,
+  oiData,
 }) => {
   const filteredSignals = signals.filter((sig) => {
     if (activeFormation === 'NONE') return false;
@@ -81,7 +83,147 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
         </div>
       )}
 
-      {/* 2. Found Formations Section */}
+      {/* 2. Open Interest (OI) Delta & Breakout Confirmation */}
+      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/50 dark:bg-[#15191e]/40 flex-shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+            <BarChart2 className="w-3.5 h-3.5 text-emerald-500" /> ДЕТЕКЦІЯ OI DELTA
+          </span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+              oiData?.oi_status === 'INCREASING'
+                ? 'bg-emerald-500/10 text-[#0ecb81]'
+                : oiData?.oi_status === 'DECREASING'
+                ? 'bg-rose-500/10 text-[#f6465d]'
+                : 'bg-slate-500/10 text-slate-500 dark:text-gray-400'
+            }`}
+          >
+            {oiData?.oi_status || 'NEUTRAL'}
+          </span>
+        </div>
+
+        {/* Current OI & Volatility threshold */}
+        <div className="flex flex-col gap-0.5 mb-2 text-[11px]">
+          <div className="flex justify-between items-baseline">
+            <span className="text-slate-400 dark:text-gray-500">Базовий OI: </span>
+            <span className="text-slate-800 dark:text-gray-100 font-mono font-bold">
+              {oiData?.current_oi !== null && oiData?.current_oi !== undefined
+                ? oiData.current_oi.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                : openInterest !== undefined
+                ? openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                : '---'}{' '}
+              <span className="text-[10px] text-slate-400 font-sans font-normal">{oiData?.coin || ''}</span>
+            </span>
+          </div>
+
+          {oiData?.current_oi_usd && (
+            <div className="flex justify-between items-baseline text-[10px]">
+              <span className="text-slate-400 dark:text-gray-500">USD Notional: </span>
+              <span className="text-slate-600 dark:text-gray-300 font-mono font-medium">
+                ${oiData.current_oi_usd >= 1e9
+                  ? `${(oiData.current_oi_usd / 1e9).toFixed(2)}B`
+                  : `${(oiData.current_oi_usd / 1e6).toFixed(2)}M`}
+              </span>
+            </div>
+          )}
+
+          <div className="flex justify-between items-baseline text-[10px] text-slate-400 dark:text-gray-500 font-mono mt-0.5">
+            <span>Поріг чутливості θ:</span>
+            <span className={oiData?.volatility_info?.is_adaptive ? 'text-emerald-500' : 'text-slate-400'}>
+              ±{(oiData?.volatility_threshold_pct ?? 0.25).toFixed(2)}%
+              {oiData?.volatility_info?.is_adaptive ? ' (адапт.)' : ' (фікс.)'}
+            </span>
+          </div>
+        </div>
+
+        {/* Multi-Interval Delta Grid: 1m, 5m, 15m, 1h */}
+        <div className="grid grid-cols-4 gap-1 mb-2 font-mono text-[10px]">
+          {(['1m', '5m', '15m', '1h'] as const).map((intv) => {
+            const d = oiData?.deltas?.[intv];
+            const pct = d?.delta_pct ?? 0;
+            const thresh = oiData?.volatility_threshold_pct ?? 0.25;
+            const isGap = d?.status === 'GAP_DETECTED';
+            const isNoHist = d?.status === 'INSUFFICIENT_HISTORY';
+            const isInc = pct > thresh;
+            const isDec = pct < -thresh;
+            const colorClass = isGap
+              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+              : isNoHist
+              ? 'text-slate-400 bg-slate-100 dark:bg-[#1e2329]/30 border-slate-200 dark:border-[#2b313a]'
+              : isInc
+              ? 'text-[#0ecb81] bg-emerald-500/10 border-emerald-500/20'
+              : isDec
+              ? 'text-[#f6465d] bg-rose-500/10 border-rose-500/20'
+              : 'text-slate-500 dark:text-gray-400 bg-slate-100 dark:bg-[#1e2329]/50 border-slate-200 dark:border-[#2b313a]';
+
+            return (
+              <div key={intv} className={`p-1 rounded border flex flex-col items-center justify-center ${colorClass}`}>
+                <span className="text-[9px] text-slate-400 dark:text-gray-500 font-sans">{intv}</span>
+                <span className="font-bold">
+                  {isGap ? (
+                    'GAP'
+                  ) : isNoHist ? (
+                    '...'
+                  ) : pct > 0 ? (
+                    `+${pct.toFixed(1)}%`
+                  ) : (
+                    `${pct.toFixed(1)}%`
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Level Breakout / Interaction Analysis Card */}
+        {oiData?.breakout_signals && oiData.breakout_signals.length > 0 ? (
+          <div className="space-y-1.5 mt-2">
+            {oiData.breakout_signals.slice(0, 2).map((sig) => (
+              <div
+                key={sig.level_id}
+                className={`p-2 rounded border text-[11px] ${
+                  sig.badge_color === 'green'
+                    ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200'
+                    : sig.badge_color === 'red'
+                    ? 'border-rose-500/30 bg-rose-500/5 text-rose-800 dark:text-rose-200'
+                    : sig.badge_color === 'amber'
+                    ? 'border-amber-500/30 bg-amber-500/5 text-amber-800 dark:text-amber-200'
+                    : 'border-slate-300 dark:border-gray-700 bg-slate-100/50 dark:bg-gray-800/30 text-slate-700 dark:text-gray-300'
+                }`}
+              >
+                <div className="flex justify-between items-center font-bold mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[9px] px-1 py-0.2 rounded font-sans font-bold ${
+                        sig.direction === 'UP'
+                          ? 'bg-emerald-500/20 text-[#0ecb81]'
+                          : 'bg-rose-500/20 text-[#f6465d]'
+                      }`}
+                    >
+                      {sig.direction === 'UP' ? 'LONG' : 'SHORT'}
+                    </span>
+                    <span className="text-[10px] truncate">{sig.status}</span>
+                  </div>
+                  <span className="font-mono text-[10px] font-bold">
+                    {sig.oi_delta_pct > 0 ? `+${sig.oi_delta_pct.toFixed(2)}%` : `${sig.oi_delta_pct.toFixed(2)}%`}
+                  </span>
+                </div>
+                <div className="text-[10px] leading-tight opacity-90">{sig.interpretation}</div>
+                <div className="mt-1 pt-1 border-t border-current/10 flex justify-between text-[9px] opacity-75 font-mono">
+                  <span>Рівень: {sig.level_price}</span>
+                  <span>Час: {sig.duration_seconds.toFixed(0)}s</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[10px] text-slate-400 dark:text-gray-500 italic py-0.5">
+            Ціна поза зоною пробою / тестування ключових рівнів.
+          </div>
+        )}
+      </div>
+
+      {/* 3. Found Formations Section */}
       <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] flex-shrink-0">
         <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
           <span>ЗНАЙДЕНІ ФОРМАЦІЇ · {filteredSignals.length}</span>

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Timeframe, ConnectionState, WSConnectionDetails } from '../types';
-import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw } from 'lucide-react';
+import { Timeframe, ConnectionState, WSConnectionDetails, OIData } from '../types';
+import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTheme, ThemePreference } from '../context/ThemeContext';
 
 interface TopBarProps {
@@ -14,6 +14,7 @@ interface TopBarProps {
   wsStatus?: ConnectionState;
   wsDetails?: WSConnectionDetails;
   onToggleWS?: () => void;
+  oiData?: OIData;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -27,6 +28,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   wsStatus = 'connected',
   wsDetails,
   onToggleWS,
+  oiData,
 }) => {
   const { themePreference, resolvedTheme, setThemePreference } = useTheme();
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
@@ -130,6 +132,76 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="ml-2 font-mono text-xl font-semibold text-[#0ecb81]">
           {price > 0 ? (price < 1 ? price.toFixed(5) : price < 50 ? price.toFixed(3) : price.toFixed(2)) : '---'}
         </div>
+
+        {/* Real-time Open Interest Delta Badge */}
+        {oiData && oiData.current_oi !== null && (
+          <div
+            title={`Hyperliquid OI: ${oiData.current_oi.toLocaleString()} ${coin} (${oiData.current_oi_usd ? '$' + (oiData.current_oi_usd >= 1e9 ? (oiData.current_oi_usd / 1e9).toFixed(2) + 'B' : (oiData.current_oi_usd / 1e6).toFixed(2) + 'M') : ''}) | 1m: ${oiData.deltas?.['1m']?.delta_pct?.toFixed(2)}% | 5m: ${oiData.deltas?.['5m']?.delta_pct?.toFixed(2)}% | 15m: ${oiData.deltas?.['15m']?.delta_pct?.toFixed(2)}% | 1h: ${oiData.deltas?.['1h']?.delta_pct?.toFixed(2)}%`}
+            className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] text-xs font-mono ml-2 select-none"
+          >
+            <span className="text-slate-400 dark:text-gray-500 font-sans text-[11px] font-medium">OI:</span>
+            <span className="text-slate-800 dark:text-gray-200 font-semibold">
+              {oiData.current_oi >= 1_000_000
+                ? `${(oiData.current_oi / 1_000_000).toFixed(2)}M`
+                : oiData.current_oi >= 1_000
+                ? `${(oiData.current_oi / 1_000).toFixed(1)}K`
+                : oiData.current_oi.toFixed(1)}{' '}
+              <span className="text-[10px] text-slate-400 font-sans">{coin}</span>
+            </span>
+
+            {/* USD Notional representation */}
+            {oiData.current_oi_usd && (
+              <span className="text-[10px] text-slate-500 dark:text-gray-400 font-sans hidden xl:inline">
+                (${oiData.current_oi_usd >= 1e9
+                  ? `${(oiData.current_oi_usd / 1e9).toFixed(2)}B`
+                  : oiData.current_oi_usd >= 1e6
+                  ? `${(oiData.current_oi_usd / 1e6).toFixed(2)}M`
+                  : `${(oiData.current_oi_usd / 1e3).toFixed(1)}K`})
+              </span>
+            )}
+
+            {(() => {
+              const d5 = oiData.deltas?.['5m'];
+              const pct = d5?.delta_pct ?? 0;
+              const isGap = d5?.status === 'GAP_DETECTED';
+              const isNoHist = d5?.status === 'INSUFFICIENT_HISTORY';
+              const isInc = pct > (oiData.volatility_threshold_pct || 0.25);
+              const isDec = pct < -(oiData.volatility_threshold_pct || 0.25);
+              return (
+                <span
+                  className={`flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                    isGap
+                      ? 'text-amber-500 bg-amber-500/10'
+                      : isNoHist
+                      ? 'text-slate-400 bg-slate-500/10'
+                      : isInc
+                      ? 'text-[#0ecb81] bg-emerald-500/10'
+                      : isDec
+                      ? 'text-[#f6465d] bg-rose-500/10'
+                      : 'text-slate-500 dark:text-gray-400 bg-slate-500/10'
+                  }`}
+                >
+                  {isGap ? (
+                    'GAP'
+                  ) : isNoHist ? (
+                    '...'
+                  ) : (
+                    <>
+                      {isInc ? (
+                        <TrendingUp className="w-3 h-3" />
+                      ) : isDec ? (
+                        <TrendingDown className="w-3 h-3" />
+                      ) : (
+                        <Minus className="w-3 h-3" />
+                      )}
+                      {pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`} (5m)
+                    </>
+                  )}
+                </span>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* Right: Theme Selector, Timeframe Selector & Actions */}

@@ -104,13 +104,81 @@ export interface SignalItem {
   id: string;
   coin: string;
   interval: string;
-  category: 'sweep' | 'cascade' | 'trendline' | 'fvg';
+  category: 'sweep' | 'cascade' | 'trendline' | 'fvg' | 'breakout_oi';
   title: string;
   direction: 'LONG' | 'SHORT' | 'NEUTRAL';
   desc: string;
   price: number;
   distPct?: number;
   time: number;
+  scenario?: string;
+  badgeColor?: string;
+}
+
+export interface OIDeltaItem {
+  interval_seconds: number;
+  current_oi: number | null;
+  previous_oi: number | null;
+  delta: number;
+  delta_pct: number;
+  status: 'OK' | 'STALE' | 'INSUFFICIENT_HISTORY' | 'GAP_DETECTED' | 'NO_DATA';
+  is_valid: boolean;
+  start_time: number | null;
+  end_time: number | null;
+  actual_duration_seconds: number;
+}
+
+export interface OILevelAnalysis {
+  level_id: string;
+  level_price: number;
+  level_type: 'resistance' | 'support';
+  current_price: number;
+  test_start_price: number;
+  breakout_price: number | null;
+  test_start_time: number | null;
+  current_time: number;
+  duration_seconds: number;
+  direction: 'UP' | 'DOWN';
+  oi_delta: number;
+  oi_delta_pct: number;
+  threshold_pct: number;
+  status: string;
+  scenario: 'SCENARIO_A' | 'SCENARIO_B' | 'SCENARIO_C' | 'SCENARIO_D' | null;
+  badge_color: 'green' | 'red' | 'gray' | 'amber' | 'blue';
+  interpretation: string;
+  is_breakout: boolean;
+  in_test_zone: boolean;
+  is_valid: boolean;
+  is_new_event?: boolean;
+  is_impulse?: boolean;
+}
+
+export interface OIData {
+  coin: string;
+  current_oi: number | null;
+  current_oi_usd?: number | null;
+  current_price: number | null;
+  timestamp: number | null;
+  is_stale: boolean;
+  samples_count: number;
+  deltas: {
+    '1m': OIDeltaItem;
+    '5m': OIDeltaItem;
+    '15m': OIDeltaItem;
+    '1h': OIDeltaItem;
+  };
+  volatility_threshold_pct: number;
+  volatility_info?: {
+    threshold_pct: number;
+    is_adaptive: boolean;
+    status: string;
+    samples_count: number;
+    desc: string;
+  };
+  oi_status: 'INCREASING' | 'DECREASING' | 'NEUTRAL' | 'COLLECTING' | 'STALE';
+  oi_color: 'green' | 'red' | 'gray';
+  level_analyses: OILevelAnalysis[];
+  breakout_signals: OILevelAnalysis[];
 }
 
 export interface AnalysisData {
@@ -178,6 +246,7 @@ export interface AnalysisData {
     recentLow: number;
   };
   signals: SignalItem[];
+  oi?: OIData;
 }
 
 export interface CoinMeta {
@@ -198,4 +267,9 @@ export interface ScreenerItem {
   signalsCount: number;
   resistancesCount: number;
   supportsCount: number;
+  openInterest?: number;
+  oiDelta5m?: number;
+  oiDeltaPct5m?: number;
+  oiStatus?: string;
+  oiColor?: string;
 }

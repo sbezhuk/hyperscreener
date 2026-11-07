@@ -79,6 +79,14 @@ class HyperliquidClient:
                 "fundingRate": funding,
                 "szDecimals": universe_item.get("szDecimals", 2)
             })
+
+            # Track in OITracker
+            try:
+                from .analyzer.oi_tracker import oi_manager
+                if open_interest > 0 and mark_px > 0:
+                    oi_manager.record_tick(coin=name, oi=open_interest, price=mark_px)
+            except Exception:
+                pass
             
         coins.sort(key=lambda x: x["volume24h"], reverse=True)
         self._cache[cache_key] = coins

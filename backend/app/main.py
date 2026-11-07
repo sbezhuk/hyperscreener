@@ -8,6 +8,7 @@ from typing import List, Optional
 from .hyperliquid import hl_client
 from .ws_manager import hl_ws_manager
 from .analyzer.screener import analyze_coin_data, scan_market
+from .analyzer.oi_tracker import oi_manager
 
 app = FastAPI(title="Hyperliquid Screener API", version="1.0.0")
 
@@ -81,6 +82,25 @@ async def get_screener_signals(
     try:
         results = await scan_market(top_n=top_n, interval=interval)
         return {"success": True, "count": len(results), "results": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/oi")
+async def get_oi(coin: str = Query("ETH", description="Coin symbol")):
+    """Returns real-time Open Interest, 1m/5m/15m/1h deltas, volatility thresholds and level interpretations."""
+    try:
+        coin_upper = coin.upper()
+        tracker = oi_manager.get_tracker(coin_upper)
+        if not tracker._history:
+            meta = await hl_client.get_meta_and_contexts()
+            for c in meta:
+                if c["name"] == coin_upper:
+                    oi_manager.record_tick(coin_upper, c["openInterest"], c["markPrice"])
+                    break
+
+        levels = hl_ws_manager._get_all_levels_for_coin(coin_upper)
+        summary = oi_manager.get_coin_oi_summary(coin_upper, levels=levels)
+        return {"success": True, "data": summary}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

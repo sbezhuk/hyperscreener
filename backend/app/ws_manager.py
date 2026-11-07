@@ -7,6 +7,7 @@ import websockets
 from fastapi import WebSocket
 
 from .hyperliquid import hl_client
+from .analyzer.oi_tracker import oi_manager
 from .reconnect_manager import (
     ReconnectManager,
     BackoffConfig,
@@ -60,6 +61,8 @@ class HyperliquidWSManager:
 
         # Active subscriptions on Hyperliquid WS: set of (coin, interval)
         self._subscribed_topics: Set[Tuple[str, str]] = set()
+        # Active coin asset context subscriptions on Hyperliquid WS: set of coin symbols
+        self._subscribed_coins: Set[str] = set()
 
         # Levels cache for live sweep checking: (coin, interval) -> { "resistances": [...], "supports": [...] }
         self._levels_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -166,8 +169,9 @@ class HyperliquidWSManager:
         topic = (coin, clean_tf)
         self._client_subs[client].add(topic)
 
-        # If not subscribed to Hyperliquid yet, subscribe now
+        # If not subscribed to Hyperliquid yet, subscribe now (candle and activeAssetCtx for real-time OI)
         await self._ensure_hl_subscribed(coin, clean_tf)
+        await self._ensure_hl_coin_subscribed(coin)
 
     async def unsubscribe_client(self, client: WebSocket, coin: str, interval: str):
         coin = coin.upper()
@@ -176,6 +180,7 @@ class HyperliquidWSManager:
         if client in self._client_subs and topic in self._client_subs[client]:
             self._client_subs[client].remove(topic)
             await self._check_and_unsubscribe_if_unused(coin, clean_tf)
+            await self._check_and_unsubscribe_coin_if_unused(coin)
 
     async def _check_and_unsubscribe_if_unused(self, coin: str, interval: str):
         topic = (coin, interval)
@@ -195,6 +200,43 @@ class HyperliquidWSManager:
                     await self._hl_ws.send(json.dumps(unsub_msg))
                 except Exception as e:
                     logger.warning(f"Error sending unsubscribe: {e}")
+
+    async def _check_and_unsubscribe_coin_if_unused(self, coin: str):
+        has_coin_subscribers = any(
+            any(sub_coin == coin for sub_coin, _ in subs)
+            for subs in self._client_subs.values()
+        )
+        if not has_coin_subscribers and coin in self._subscribed_coins:
+            self._subscribed_coins.remove(coin)
+            if self._hl_ws and self.is_connected:
+                unsub_msg = {
+                    "method": "unsubscribe",
+                    "subscription": {
+                        "type": "activeAssetCtx",
+                        "coin": coin
+                    }
+                }
+                try:
+                    await self._hl_ws.send(json.dumps(unsub_msg))
+                except Exception as e:
+                    logger.warning(f"Error sending unsubscribe activeAssetCtx: {e}")
+
+    async def _ensure_hl_coin_subscribed(self, coin: str):
+        if coin not in self._subscribed_coins:
+            self._subscribed_coins.add(coin)
+            if self._hl_ws and self.is_connected:
+                sub_msg = {
+                    "method": "subscribe",
+                    "subscription": {
+                        "type": "activeAssetCtx",
+                        "coin": coin
+                    }
+                }
+                try:
+                    await self._hl_ws.send(json.dumps(sub_msg))
+                    logger.info(f"Subscribed to Hyperliquid WS activeAssetCtx: {coin}")
+                except Exception as e:
+                    logger.warning(f"Error sending subscribe activeAssetCtx: {e}")
 
     async def _ensure_hl_subscribed(self, coin: str, interval: str):
         topic = (coin, interval)
@@ -255,7 +297,18 @@ class HyperliquidWSManager:
                                 }
                             }
                             await ws.send(json.dumps(sub_msg))
-                            logger.info(f"Restored subscription: {coin} {interval}")
+                            logger.info(f"Restored subscription candle: {coin} {interval}")
+
+                        for coin in list(self._subscribed_coins):
+                            sub_ctx = {
+                                "method": "subscribe",
+                                "subscription": {
+                                    "type": "activeAssetCtx",
+                                    "coin": coin
+                                }
+                            }
+                            await ws.send(json.dumps(sub_ctx))
+                            logger.info(f"Restored subscription activeAssetCtx: {coin}")
 
                         # Start heartbeat watchdog (pings every 20s, checks silent timeout at 45s)
                         if self._watchdog_task and not self._watchdog_task.done():
@@ -424,6 +477,63 @@ class HyperliquidWSManager:
 
             for dc in dead_clients:
                 await self.unregister_client(dc)
+
+        if channel == "activeAssetCtx":
+            asset_data = data.get("data")
+            if not asset_data:
+                return
+            coin = asset_data.get("coin")
+            ctx = asset_data.get("ctx", {})
+            if not coin or not ctx:
+                return
+
+            try:
+                oi = float(ctx.get("openInterest", 0.0))
+                px = float(ctx.get("markPx", 0.0))
+                funding = float(ctx.get("funding", 0.0))
+            except (ValueError, TypeError):
+                return
+
+            if oi > 0 and px > 0:
+                oi_manager.record_tick(coin=coin, oi=oi, price=px)
+                levels = self._get_all_levels_for_coin(coin)
+                oi_summary = oi_manager.get_coin_oi_summary(coin=coin, levels=levels)
+
+                payload = {
+                    "type": "oi_tick",
+                    "coin": coin,
+                    "openInterest": oi,
+                    "markPrice": px,
+                    "fundingRate": funding,
+                    "oi_summary": oi_summary,
+                    "breakout_signals": oi_summary.get("breakout_signals", [])
+                }
+                msg_str = json.dumps(payload)
+
+                dead_clients = []
+                for client, subs in list(self._client_subs.items()):
+                    if any(sub_coin == coin for sub_coin, _ in subs):
+                        try:
+                            await client.send_text(msg_str)
+                        except Exception:
+                            dead_clients.append(client)
+
+                for dc in dead_clients:
+                    await self.unregister_client(dc)
+
+    def _get_all_levels_for_coin(self, coin: str) -> List[Dict[str, Any]]:
+        """Returns consolidated support and resistance levels for this coin across cached timeframes."""
+        coin_upper = coin.upper()
+        levels: List[Dict[str, Any]] = []
+        seen = set()
+        for (c, _tf), data in self._levels_cache.items():
+            if c == coin_upper and isinstance(data, dict):
+                for lvl in data.get("resistances", []) + data.get("supports", []):
+                    lid = lvl.get("zone_id") or str(lvl.get("price"))
+                    if lid not in seen:
+                        seen.add(lid)
+                        levels.append(lvl)
+        return levels
 
     def _update_cache_candle(self, coin: str, interval: str, candle: Dict[str, Any]):
         """Updates in-memory candle cache so REST / analysis sees fresh ticks immediately."""

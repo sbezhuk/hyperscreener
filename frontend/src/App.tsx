@@ -401,6 +401,17 @@ export function App() {
                 };
               });
             }
+          } else if (data.type === 'oi_tick') {
+            const currentCoin = selectedCoinRef.current.toUpperCase();
+            if (data.coin?.toUpperCase() === currentCoin) {
+              setAnalysis((prev) => {
+                if (!prev || prev.coin?.toUpperCase() !== currentCoin) return prev;
+                return {
+                  ...prev,
+                  oi: data.oi_summary || prev.oi,
+                };
+              });
+            }
           }
         } catch (err) {
           console.error('Error handling WS message:', err);
@@ -638,6 +649,7 @@ export function App() {
         wsStatus={wsStatus}
         wsDetails={wsDetails}
         onToggleWS={handleToggleWS}
+        oiData={analysis?.oi}
       />
 
       {/* Formations & Multi-Timeframe Filter Bar */}
@@ -695,6 +707,7 @@ export function App() {
           openInterest={currentCoinMeta?.openInterest}
           fundingRate={currentCoinMeta?.fundingRate}
           activeFormation={activeFormation}
+          oiData={analysis?.oi}
         />
       </div>
 

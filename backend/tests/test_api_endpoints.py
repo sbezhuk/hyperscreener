@@ -18,6 +18,23 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("diagnostics", data)
         self.assertIn("subscribed_topics", data)
 
+    def test_oi_endpoint(self):
+        from app.analyzer.oi_tracker import oi_manager
+        oi_manager.record_tick("ETH", 950000.0, 2600.0)
+        response = self.client.get("/api/oi?coin=ETH")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIn("data", data)
+        oi_data = data["data"]
+        self.assertEqual(oi_data["coin"], "ETH")
+        self.assertEqual(oi_data["current_oi"], 950000.0)
+        self.assertIn("deltas", oi_data)
+        self.assertIn("1m", oi_data["deltas"])
+        self.assertIn("5m", oi_data["deltas"])
+        self.assertIn("15m", oi_data["deltas"])
+        self.assertIn("1h", oi_data["deltas"])
+
     def test_manual_disconnect_and_reconnect_endpoints(self):
         # Disconnect
         resp_disc = self.client.post("/api/ws/disconnect")
