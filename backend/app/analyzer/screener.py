@@ -9,30 +9,39 @@ from .mtf_fvg import mtf_fvg_manager
 from .liquidity import detect_liquidity_and_sweeps
 from .structure import analyze_market_structure
 
-async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -> Dict[str, Any]:
+async def analyze_coin_data(
+    coin: str,
+    interval: str = "5m",
+    limit: int = 600,
+    include_mtf: bool = True
+) -> Dict[str, Any]:
     """
     Performs complete technical & SMC analysis for a single coin strictly for the requested timeframe,
-    and calculates independent Multi-Timeframe (MTF) levels across all timeframes.
+    and optionally calculates independent Multi-Timeframe (MTF) levels across all timeframes.
     """
     candles = await hl_client.get_candles(coin=coin, interval=interval, limit=limit)
     if not candles:
         return {}
 
     current_price = candles[-1]["close"]
-
-    # 1. Multi-Timeframe Levels Engine (Parallel calculation with in-memory caching)
-    mtf_levels = await mtf_levels_manager.get_all_timeframe_levels(
-        coin=coin,
-        current_price=current_price,
-        active_interval=interval,
-        active_candles=candles
-    )
-
-    # 2. Extract active timeframe levels and compute cascades
     clean_tf = interval.lower()
-    active_data = mtf_levels.get(clean_tf, {"resistances": [], "supports": []})
-    active_res = active_data.get("resistances", [])
-    active_sup = active_data.get("supports", [])
+
+    if include_mtf:
+        # 1. Multi-Timeframe Levels Engine (Parallel calculation with in-memory caching)
+        mtf_levels = await mtf_levels_manager.get_all_timeframe_levels(
+            coin=coin,
+            current_price=current_price,
+            active_interval=interval,
+            active_candles=candles
+        )
+        active_data = mtf_levels.get(clean_tf, {"resistances": [], "supports": []})
+        active_res = active_data.get("resistances", [])
+        active_sup = active_data.get("supports", [])
+    else:
+        active_levels = analyze_levels(candles, interval=clean_tf)
+        active_res = active_levels.get("resistances", [])
+        active_sup = active_levels.get("supports", [])
+        mtf_levels = {clean_tf: {"resistances": active_res, "supports": active_sup}}
 
     cascades = []
     if len(active_res) >= 2:
@@ -59,17 +68,22 @@ async def analyze_coin_data(coin: str, interval: str = "5m", limit: int = 400) -
     structure_data = analyze_market_structure(candles)
     liquidity_data = detect_liquidity_and_sweeps(candles, interval=interval)
 
-    # 3. Independent Multi-Timeframe FVG Engine
-    mtf_fvg_results = await mtf_fvg_manager.get_all_timeframe_fvgs(
-        coin=coin,
-        active_interval=interval,
-        active_candles=candles,
-        trend=structure_data.get("trend", "NEUTRAL"),
-        structure_events=structure_data.get("events", [])
-    )
-    fvgs = mtf_fvg_results.get("active_fvgs", [])
-    all_timeframe_fvgs = mtf_fvg_results.get("all_timeframes", {})
-    fvg_confluences = mtf_fvg_results.get("confluences", [])
+    # 3. FVG Engine (MTF when requested, local fast scan when in screener mode)
+    if include_mtf:
+        mtf_fvg_results = await mtf_fvg_manager.get_all_timeframe_fvgs(
+            coin=coin,
+            active_interval=interval,
+            active_candles=candles,
+            trend=structure_data.get("trend", "NEUTRAL"),
+            structure_events=structure_data.get("events", [])
+        )
+        fvgs = mtf_fvg_results.get("active_fvgs", [])
+        all_timeframe_fvgs = mtf_fvg_results.get("all_timeframes", {})
+        fvg_confluences = mtf_fvg_results.get("confluences", [])
+    else:
+        fvgs = detect_fvgs(candles, interval=interval)
+        all_timeframe_fvgs = {clean_tf: fvgs}
+        fvg_confluences = []
 
     # Compile formations / signals
     signals = []
@@ -199,10 +213,11 @@ async def scan_market(top_n: int = 25, interval: str = "5m") -> List[Dict[str, A
     coins_meta = await hl_client.get_meta_and_contexts()
     target_coins = [c["name"] for c in coins_meta[:top_n]]
 
-    sem = asyncio.Semaphore(5)
+    sem = asyncio.Semaphore(4)
     async def fetch_one(coin):
         async with sem:
-            return await analyze_coin_data(coin, interval=interval, limit=120)
+            await asyncio.sleep(0.05)
+            return await analyze_coin_data(coin, interval=interval, limit=120, include_mtf=False)
 
     tasks = [fetch_one(coin) for coin in target_coins]
     results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -13,6 +13,8 @@ interface ChartProps {
   activeFormation: FormationFilter;
   coin: string;
   interval?: string;
+  onLoadEarlier?: () => void;
+  isLoadingEarlier?: boolean;
 }
 
 export const Chart: React.FC<ChartProps> = ({
@@ -25,12 +27,19 @@ export const Chart: React.FC<ChartProps> = ({
   activeFormation,
   coin,
   interval,
+  onLoadEarlier,
+  isLoadingEarlier = false,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const zonesPrimitiveRef = useRef<ZonesPrimitive | null>(null);
   const priceLinesRef = useRef<any[]>([]);
+
+  const onLoadEarlierRef = useRef(onLoadEarlier);
+  onLoadEarlierRef.current = onLoadEarlier;
+  const isLoadingEarlierRef = useRef(isLoadingEarlier);
+  isLoadingEarlierRef.current = isLoadingEarlier;
 
   const prevContextRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
 
@@ -91,6 +100,19 @@ export const Chart: React.FC<ChartProps> = ({
     candleSeriesRef.current = candleSeries;
     zonesPrimitiveRef.current = zonesPrimitive;
 
+    // Subscribe to visible range changes for lazy pagination when scrolling left
+    const handleLogicalRangeChange = (newRange: any) => {
+      if (!newRange || !candleSeriesRef.current || !onLoadEarlierRef.current) return;
+      if (isLoadingEarlierRef.current) return;
+
+      const barsInfo = candleSeriesRef.current.barsInLogicalRange(newRange);
+      if (barsInfo && barsInfo.barsBefore < 40) {
+        onLoadEarlierRef.current();
+      }
+    };
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleLogicalRangeChange);
+
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
@@ -104,11 +126,13 @@ export const Chart: React.FC<ChartProps> = ({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleLogicalRangeChange);
       chart.remove();
     };
   }, []);
 
   const prevCandlesLenRef = useRef<number>(0);
+  const prevFirstCandleTimeRef = useRef<number>(0);
   // True after the first successful setData() for the current context.
   // Reset to false whenever coin/interval changes so a fresh setData() is always called first.
   const initializedRef = useRef<boolean>(false);
@@ -121,6 +145,13 @@ export const Chart: React.FC<ChartProps> = ({
       prevContextRef.current.coin !== coin ||
       prevContextRef.current.interval !== (interval || '');
 
+    const firstCandleTime = candles[0]?.time || 0;
+    const isPrependedEarlier =
+      initializedRef.current &&
+      !isContextChanged &&
+      prevFirstCandleTimeRef.current !== 0 &&
+      firstCandleTime < prevFirstCandleTimeRef.current;
+
     const mappedCandles = candles.map((c) => ({
       time: c.time as any,
       open: c.open,
@@ -129,7 +160,29 @@ export const Chart: React.FC<ChartProps> = ({
       close: c.close,
     }));
 
-    // Always do a full setData() when:
+    // If earlier data was prepended to history, preserve the user's current scroll range
+    if (isPrependedEarlier) {
+      const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
+      const addedBarsCount = candles.length - prevCandlesLenRef.current;
+
+      try {
+        candleSeriesRef.current.setData(mappedCandles);
+        prevCandlesLenRef.current = candles.length;
+        prevFirstCandleTimeRef.current = firstCandleTime;
+
+        if (logicalRange && addedBarsCount > 0) {
+          chartRef.current.timeScale().setVisibleLogicalRange({
+            from: logicalRange.from + addedBarsCount,
+            to: logicalRange.to + addedBarsCount,
+          });
+        }
+      } catch (err) {
+        console.error('Error prepending earlier candles:', err);
+      }
+      return;
+    }
+
+    // Always do a full setData() and fitContent() when:
     // 1. The coin or interval changed (new context)
     // 2. We have never successfully loaded data for this context yet (initializedRef is false)
     // 3. A big batch arrived (not a single WS tick)
@@ -140,6 +193,7 @@ export const Chart: React.FC<ChartProps> = ({
         // Reset state for the new context BEFORE calling setData
         initializedRef.current = false;
         prevCandlesLenRef.current = 0;
+        prevFirstCandleTimeRef.current = 0;
         prevContextRef.current = { coin, interval: interval || '' };
       }
 
@@ -149,6 +203,7 @@ export const Chart: React.FC<ChartProps> = ({
         // Mark as initialized ONLY after successful setData
         initializedRef.current = true;
         prevCandlesLenRef.current = candles.length;
+        prevFirstCandleTimeRef.current = firstCandleTime;
       } catch (err) {
         console.error('Error in candleSeries.setData:', err);
         // Do NOT set initializedRef = true so the next render retries setData
@@ -255,6 +310,14 @@ export const Chart: React.FC<ChartProps> = ({
   return (
     <div className="relative w-full h-full flex flex-col bg-[#0b0e11] overflow-hidden">
       <div ref={chartContainerRef} className="w-full flex-1" />
+
+      {/* Top indicator for loading earlier history */}
+      {isLoadingEarlier && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#15191e]/90 backdrop-blur border border-[#2b313a] text-gray-300 text-xs px-3 py-1.5 rounded-full shadow-lg z-30 transition-all pointer-events-none">
+          <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+          <span>Довантаження історії...</span>
+        </div>
+      )}
 
       <div className="absolute bottom-2 left-3 flex items-center gap-1.5 opacity-60 text-xs font-mono select-none pointer-events-none z-20">
         <span className="bg-[#1e2329] px-1.5 py-0.5 rounded text-[10px] text-gray-400 font-bold">17</span>

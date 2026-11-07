@@ -43,11 +43,18 @@ async def get_coins():
 async def get_candles(
     coin: str = Query("ETH", description="Coin symbol"),
     interval: str = Query("5m", description="Candle interval (1m, 5m, 15m, 1h, 4h, 1d)"),
-    limit: int = Query(300, ge=50, le=1000)
+    limit: int = Query(500, ge=50, le=5000),
+    before: Optional[int] = Query(None, description="Fetch candles before this unix timestamp in seconds (for lazy pagination)")
 ):
-    """Returns OHLCV candles formatted for TradingView Lightweight Charts."""
+    """Returns OHLCV candles formatted for TradingView Lightweight Charts with pagination support."""
     try:
-        candles = await hl_client.get_candles(coin=coin.upper(), interval=interval, limit=limit)
+        end_time_ms = (before * 1000) if before else None
+        candles = await hl_client.get_candles(
+            coin=coin.upper(),
+            interval=interval,
+            limit=limit,
+            end_time=end_time_ms
+        )
         return {"success": True, "coin": coin.upper(), "interval": interval, "candles": candles}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -55,11 +62,12 @@ async def get_candles(
 @app.get("/api/analysis")
 async def get_analysis(
     coin: str = Query("ETH", description="Coin symbol"),
-    interval: str = Query("5m", description="Candle interval (1m, 5m, 15m, 1h, 4h, 1d)")
+    interval: str = Query("5m", description="Candle interval (1m, 5m, 15m, 1h, 4h, 1d)"),
+    limit: int = Query(600, ge=50, le=2000)
 ):
     """Full technical & SMC analysis (Levels, FVGs, Sweeps, Structure, Signals)."""
     try:
-        data = await analyze_coin_data(coin=coin.upper(), interval=interval, limit=300)
+        data = await analyze_coin_data(coin=coin.upper(), interval=interval, limit=limit)
         return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "error": str(e)}

@@ -33,9 +33,26 @@ class HyperliquidClient:
 
         client = await self.get_client()
         payload = {"type": "metaAndAssetCtxs"}
-        resp = await client.post(HYPERLIQUID_API_URL, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+        
+        for attempt in range(3):
+            try:
+                resp = await client.post(HYPERLIQUID_API_URL, json=payload)
+                if resp.status_code == 429:
+                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except Exception as e:
+                if attempt == 2:
+                    if cache_key in self._cache:
+                        return self._cache[cache_key]
+                    raise e
+                await asyncio.sleep(0.5 * (2 ** attempt))
+        else:
+            if cache_key in self._cache:
+                return self._cache[cache_key]
+            return []
         
         meta = data[0]["universe"]
         ctxs = data[1]
@@ -68,20 +85,26 @@ class HyperliquidClient:
         self._cache_expiry[cache_key] = now + 10.0
         return coins
 
-    async def get_candles(self, coin: str, interval: str = "5m", limit: int = 250) -> List[Dict[str, Any]]:
+    async def get_candles(
+        self,
+        coin: str,
+        interval: str = "5m",
+        limit: int = 1000,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Fetches historical OHLCV candles from Hyperliquid.
-        Normalized and cached for 4 seconds for instant responsiveness.
+        Normalized and cached for fast responsiveness.
+        Supports custom start_time and end_time (in milliseconds).
         """
         coin = coin.upper()
         # Normalization: e.g. '1D' -> '1d'
         interval_clean = interval.lower()
-        if interval_clean == "1d":
-            interval_clean = "1d"
-        elif interval_clean not in ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d"]:
+        if interval_clean not in ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d"]:
             interval_clean = "5m"
 
-        cache_key = f"candles:{coin}:{interval_clean}:{limit}"
+        cache_key = f"candles:{coin}:{interval_clean}:{limit}:{start_time}:{end_time}"
         now = time.time()
         if cache_key in self._cache and self._cache_expiry.get(cache_key, 0) > now:
             return self._cache[cache_key]
@@ -104,7 +127,8 @@ class HyperliquidClient:
         
         step = interval_ms_map.get(interval_clean, 5 * 60 * 1000)
         now_ms = int(time.time() * 1000)
-        start_ms = now_ms - (limit * step)
+        end_ms = end_time if end_time is not None else now_ms
+        start_ms = start_time if start_time is not None else (end_ms - (limit * step))
         
         payload = {
             "type": "candleSnapshot",
@@ -112,19 +136,35 @@ class HyperliquidClient:
                 "coin": coin,
                 "interval": interval_clean,
                 "startTime": start_ms,
-                "endTime": now_ms
+                "endTime": end_ms
             }
         }
         
-        try:
-            resp = await client.post(HYPERLIQUID_API_URL, json=payload)
-            resp.raise_for_status()
-            raw_candles = resp.json()
-        except Exception as e:
-            # If network error but we have stale cache, return stale
+        # Retry up to 4 times on 429 rate limit with backoff
+        for attempt in range(4):
+            try:
+                resp = await client.post(HYPERLIQUID_API_URL, json=payload)
+                if resp.status_code == 429:
+                    wait_time = 0.8 * (1.5 ** attempt)
+                    await asyncio.sleep(wait_time)
+                    continue
+                resp.raise_for_status()
+                raw_candles = resp.json()
+                break
+            except Exception as e:
+                if attempt == 3:
+                    if cache_key in self._cache:
+                        return self._cache[cache_key]
+                    raise e
+                await asyncio.sleep(0.8 * (1.5 ** attempt))
+        else:
             if cache_key in self._cache:
                 return self._cache[cache_key]
-            raise e
+            # Try any matching coin and interval from cache as fallback
+            for k, val in self._cache.items():
+                if k.startswith(f"candles:{coin}:{interval_clean}:") and val:
+                    return val
+            return []
         
         candles = []
         for c in raw_candles:
@@ -140,7 +180,9 @@ class HyperliquidClient:
         candles.sort(key=lambda x: x["time"])
         
         self._cache[cache_key] = candles
-        self._cache_expiry[cache_key] = now + 4.0 # Cache for 4s
+        # Cache for 30s for general calls, longer if historical range (end_time set)
+        ttl = 120.0 if end_time and end_time < now_ms - 60000 else 30.0
+        self._cache_expiry[cache_key] = now + ttl
         return candles
 
 hl_client = HyperliquidClient()

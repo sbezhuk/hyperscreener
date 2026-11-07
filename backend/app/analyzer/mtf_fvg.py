@@ -16,7 +16,7 @@ class MTFFVGManager:
     - Tracks MTF Confluence across independent timeframes without merging original FVG objects.
     """
 
-    def __init__(self, cache_ttl_seconds: float = 12.0):
+    def __init__(self, cache_ttl_seconds: float = 60.0):
         self._cache_ttl = cache_ttl_seconds
         # key: (coin, tf) -> { "fvgs": [...], "timestamp": float, "last_candle_time": int }
         self._cache: Dict[Tuple[str, str], Dict[str, Any]] = {}

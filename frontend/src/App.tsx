@@ -5,7 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
-import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem } from './types';
+import { Timeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle } from './types';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
@@ -24,9 +24,15 @@ export function App() {
   const [screenerData, setScreenerData] = useState<ScreenerItem[]>([]);
   
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState<boolean>(false);
   const [isScreenerLoading, setIsScreenerLoading] = useState<boolean>(false);
   const [isScreenerOpen, setIsScreenerOpen] = useState<boolean>(false);
   const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+
+  // Client-side cache for instant timeframe switching: key -> AnalysisData
+  const analysisCacheRef = useRef<Map<string, { data: AnalysisData; timestamp: number }>>(new Map());
+  // Track exhausted history for lazy loading: key -> boolean
+  const hasMoreHistoryRef = useRef<Map<string, boolean>>(new Map());
 
   // AbortController ref to cancel obsolete in-flight analysis requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -51,7 +57,7 @@ export function App() {
       .catch((err) => console.error('Error fetching coins:', err));
   }, []);
 
-  // 2. Fetch Screener Signals (runs on mount and on a background timer, NOT blocking the chart)
+  // 2. Fetch Screener Signals (runs in background with an initial delay so chart loads first)
   const fetchScreener = useCallback(() => {
     setIsScreenerLoading(true);
     fetch(`${API_BASE}/api/screener?top_n=20&interval=5m`)
@@ -66,30 +72,110 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    fetchScreener();
-    const interval = setInterval(fetchScreener, 30000); // refresh screener every 30s in background
-    return () => clearInterval(interval);
+    // Delay first screener scan by 2s so initial chart analysis gets full bandwidth and zero rate limits
+    const initialTimer = setTimeout(() => {
+      fetchScreener();
+    }, 2000);
+    const interval = setInterval(fetchScreener, 60000); // refresh screener every 60s in background
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, [fetchScreener]);
 
   // 3. Fetch Single Coin Analysis & Candles with AbortController for instant responsiveness
-  const fetchAnalysis = useCallback((coinToFetch: string, tfToFetch: string) => {
+  const fetchAnalysis = useCallback((coinToFetch: string, tfToFetch: string, isSilent = false) => {
     // Cancel previous in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
+    const cleanTf = tfToFetch.toLowerCase();
+    const cacheKey = `${coinToFetch.toUpperCase()}:${cleanTf}`;
+    const cachedEntry = analysisCacheRef.current.get(cacheKey);
+    const now = Date.now();
+
+    // Check if we have fresh cached data (< 60 seconds old)
+    if (cachedEntry) {
+      setAnalysis(cachedEntry.data);
+      if (now - cachedEntry.timestamp < 60000) {
+        setIsLoading(false);
+        return;
+      }
+      // Stale cache: immediately display it to user so there's zero UI freeze, then revalidate in background
+      setIsLoading(false);
+    } else if (!isSilent) {
+      setIsLoading(true);
+    }
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    setIsLoading(true);
 
-    const cleanTf = tfToFetch.toLowerCase();
+    // Fast-path: If opening without cache, quickly fetch raw candles first so the chart renders in <500ms
+    if (!cachedEntry) {
+      fetch(`${API_BASE}/api/candles?coin=${coinToFetch}&interval=${cleanTf}&limit=600`, {
+        signal: controller.signal,
+      })
+        .then((res) => res.json())
+        .then((candleData) => {
+          if (candleData.success && candleData.candles && candleData.candles.length > 0) {
+            setAnalysis((prev) => {
+              // Only apply if full analysis hasn't arrived yet and context is still matching
+              if (
+                coinToFetch.toUpperCase() !== selectedCoinRef.current.toUpperCase() ||
+                cleanTf !== timeframeRef.current.toLowerCase()
+              ) {
+                return prev;
+              }
+              if (prev && prev.coin === coinToFetch && prev.interval === cleanTf && prev.levels) {
+                return prev; // Full analysis already arrived
+              }
+              const lastCandle = candleData.candles[candleData.candles.length - 1];
+              return {
+                coin: coinToFetch,
+                interval: cleanTf,
+                currentPrice: lastCandle.close,
+                candles: candleData.candles,
+                levels: { currentPrice: lastCandle.close, resistances: [], supports: [], cascades: [] },
+                multiTimeframeLevels: {},
+                fvgs: [],
+                multiTimeframeFvgs: {},
+                fvgConfluences: [],
+                liquidity: { sweeps: [], pools: [], trendlines: [] },
+                structure: {
+                  trend: 'NEUTRAL',
+                  summary: 'Аналіз структури ринку...',
+                  events: [],
+                  recentHigh: lastCandle.high,
+                  recentLow: lastCandle.low,
+                },
+                signals: [],
+              };
+            });
+            setIsLoading(false);
+          }
+        })
+        .catch(() => {});
+    }
+
     fetch(`${API_BASE}/api/analysis?coin=${coinToFetch}&interval=${cleanTf}`, {
       signal: controller.signal,
     })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.data) {
-          setAnalysis(data.data);
+          // Double check request is still relevant to current selection
+          if (
+            coinToFetch.toUpperCase() === selectedCoinRef.current.toUpperCase() &&
+            cleanTf === timeframeRef.current.toLowerCase()
+          ) {
+            setAnalysis(data.data);
+          }
+          // Store in client-side cache
+          analysisCacheRef.current.set(cacheKey, {
+            data: data.data,
+            timestamp: Date.now(),
+          });
         }
       })
       .catch((err) => {
@@ -98,9 +184,75 @@ export function App() {
         }
       })
       .finally(() => {
-        setIsLoading(false);
+        if (
+          coinToFetch.toUpperCase() === selectedCoinRef.current.toUpperCase() &&
+          cleanTf === timeframeRef.current.toLowerCase()
+        ) {
+          setIsLoading(false);
+        }
       });
   }, []);
+
+  // 3.1 Lazy Load Earlier Historical Candles (pagination when scrolling left)
+  const handleLoadEarlier = useCallback(() => {
+    const currentCoin = selectedCoinRef.current.toUpperCase();
+    const currentTf = timeframeRef.current.toLowerCase();
+    const paginationKey = `${currentCoin}:${currentTf}`;
+
+    if (hasMoreHistoryRef.current.get(paginationKey) === false) {
+      return; // Already reached the beginning of history
+    }
+
+    if (isLoadingEarlier || !analysis || !analysis.candles || analysis.candles.length === 0) {
+      return;
+    }
+
+    const oldestCandle = analysis.candles[0];
+    if (!oldestCandle) return;
+
+    setIsLoadingEarlier(true);
+    fetch(
+      `${API_BASE}/api/candles?coin=${currentCoin}&interval=${currentTf}&limit=500&before=${oldestCandle.time}`
+    )
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData.success && Array.isArray(resData.candles)) {
+          const olderCandles: Candle[] = resData.candles;
+          // Filter out candles with timestamps >= oldestCandle.time to ensure strict chronological prepend
+          const strictlyOlder = olderCandles.filter((c) => c.time < oldestCandle.time);
+
+          if (strictlyOlder.length === 0) {
+            hasMoreHistoryRef.current.set(paginationKey, false);
+          } else {
+            setAnalysis((prev) => {
+              if (!prev || prev.coin?.toUpperCase() !== currentCoin || prev.interval?.toLowerCase() !== currentTf) {
+                return prev;
+              }
+              const combinedCandles = [...strictlyOlder, ...prev.candles];
+              const updatedAnalysis = { ...prev, candles: combinedCandles };
+
+              // Update cache with extended candle range
+              const cacheKey = `${currentCoin}:${currentTf}`;
+              const existingCache = analysisCacheRef.current.get(cacheKey);
+              if (existingCache) {
+                analysisCacheRef.current.set(cacheKey, {
+                  ...existingCache,
+                  data: updatedAnalysis,
+                });
+              }
+
+              return updatedAnalysis;
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Error lazy-loading earlier candles:', err);
+      })
+      .finally(() => {
+        setIsLoadingEarlier(false);
+      });
+  }, [analysis, isLoadingEarlier]);
 
   // 4. WebSocket Manager for Real-Time Hyperliquid Ticks & Instant Sweeps
   const connectWebSocket = useCallback(() => {
@@ -156,7 +308,6 @@ export function App() {
                     updatedCandles[lastIdx] = newCandle;
                   } else if (newCandle.time > updatedCandles[lastIdx].time) {
                     updatedCandles.push(newCandle);
-                    if (updatedCandles.length > 300) updatedCandles.shift();
                   }
                 }
 
@@ -214,7 +365,9 @@ export function App() {
       };
 
       ws.onerror = () => {
-        ws.close();
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
       };
     } catch (err) {
       setWsStatus('disconnected');
@@ -229,7 +382,16 @@ export function App() {
     return () => {
       clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) {
-        wsRef.current.close();
+        // Prevent close() from triggering during CONNECTING in React StrictMode
+        const activeWs = wsRef.current;
+        wsRef.current = null;
+        if (activeWs.readyState === WebSocket.OPEN) {
+          activeWs.close();
+        } else if (activeWs.readyState === WebSocket.CONNECTING) {
+          activeWs.onopen = () => {
+            activeWs.close();
+          };
+        }
       }
     };
   }, [connectWebSocket]);
@@ -376,21 +538,34 @@ export function App() {
       <div className="flex flex-1 overflow-hidden relative">
         <main className="flex-1 h-full relative">
           {analysis && analysis.candles && analysis.candles.length > 0 ? (
-            <Chart
-              candles={analysis.candles}
-              resistances={filteredResistances}
-              supports={filteredSupports}
-              fvgs={filteredFvgs}
-              signals={analysis.signals}
-              liquidity={analysis.liquidity}
-              activeFormation={activeFormation}
-              coin={selectedCoin}
-              interval={timeframe}
-            />
+            <>
+              <Chart
+                candles={analysis.candles}
+                resistances={filteredResistances}
+                supports={filteredSupports}
+                fvgs={filteredFvgs}
+                signals={analysis.signals}
+                liquidity={analysis.liquidity}
+                activeFormation={activeFormation}
+                coin={selectedCoin}
+                interval={timeframe}
+                onLoadEarlier={handleLoadEarlier}
+                isLoadingEarlier={isLoadingEarlier}
+              />
+              {/* Overlay Loader during timeframe or coin switch */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-[#0b0e11]/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-gray-300 text-xs gap-2.5 z-40 transition-all pointer-events-none">
+                  <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="font-medium bg-[#15191e]/90 px-3 py-1 rounded-full border border-[#2b313a]">
+                    Оновлення даних {selectedCoin} ({timeframe})...
+                  </span>
+                </div>
+              )}
+            </>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 text-xs gap-2">
-              <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              <span>Завантаження даних {selectedCoin} ({timeframe}) з Hyperliquid...</span>
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 text-xs gap-3">
+              <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <span className="font-medium">Завантаження графіка {selectedCoin} ({timeframe}) з Hyperliquid...</span>
             </div>
           )}
         </main>
