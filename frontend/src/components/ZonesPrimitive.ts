@@ -239,6 +239,8 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         sw: typeof sweeps[0];
         yLevel: number;
         ySweep: number | null;
+        ySL: number | null;
+        slPrice: number;
         xBreakout: number | null;
         xCandle: number | null;
         score: number;
@@ -253,6 +255,15 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const xConfirm = sw.confirmationTime ? timeScale.timeToCoordinate(sw.confirmationTime as any) : timeScale.timeToCoordinate(sw.time as any);
         const xCandle = xConfirm ?? xBreakout;
 
+        // Calculate safe Stop-Loss price with protective buffer (0.25x sweep depth or min 0.18% price)
+        const isLong = sw.direction === 'LONG';
+        const sweepDist = Math.abs(sw.sweepPrice - sw.levelPrice);
+        const buffer = Math.max(sweepDist * 0.25, sw.sweepPrice * 0.0018);
+        const slPrice = isLong
+          ? Number((sw.sweepPrice - buffer).toFixed(sw.sweepPrice > 10 ? 2 : 4))
+          : Number((sw.sweepPrice + buffer).toFixed(sw.sweepPrice > 10 ? 2 : 4));
+        const ySL = candleSeries.priceToCoordinate(slPrice);
+
         // Importance score for collision resolution
         const strength = sw.levelStrength ?? 50;
         const touches = sw.touches ?? 1;
@@ -263,6 +274,8 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           sw,
           yLevel,
           ySweep,
+          ySL,
+          slPrice,
           xBreakout,
           xCandle,
           score,
@@ -286,7 +299,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       }
 
       // Draw non-colliding breakouts
-      nonColliding.forEach(({ sw, yLevel, ySweep, xBreakout, xCandle }) => {
+      nonColliding.forEach(({ sw, yLevel, ySweep, ySL, slPrice, xBreakout, xCandle }) => {
         const isLong = sw.direction === 'LONG';
         const color = isLong ? '#0ecb81' : '#f6465d';
 
@@ -300,15 +313,86 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Vertical wick/breakout marker on the triggering candle
-        const targetX = xBreakout ?? xCandle;
-        if (targetX !== null && ySweep !== null) {
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 2;
+        // Elegant Sweep Box & Safe Stop-Loss indicator (with protective buffer above/below wick)
+        const x1 = xBreakout !== null ? xBreakout : xCandle;
+        const x2 = xCandle !== null ? xCandle : xBreakout;
+        if (x1 !== null && x2 !== null && ySweep !== null) {
+          const minX = Math.min(x1, x2) - 10;
+          const maxX = Math.max(x1, x2) + 10;
+          const boxTop = Math.min(yLevel, ySweep);
+          const boxBottom = Math.max(yLevel, ySweep);
+          const boxH = Math.max(boxBottom - boxTop, 3);
+          const centerX = (minX + maxX) / 2;
+
+          // 1. Shaded Liquidity Sweep Zone (penetration area)
+          ctx.fillStyle = isLong ? 'rgba(14, 203, 129, 0.12)' : 'rgba(246, 70, 93, 0.12)';
+          ctx.fillRect(minX, boxTop, maxX - minX, boxH);
+
+          // 2. Subtle dashed perimeter of the sweep zone
+          ctx.strokeStyle = isLong ? 'rgba(14, 203, 129, 0.45)' : 'rgba(246, 70, 93, 0.45)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 2]);
+          ctx.strokeRect(minX, boxTop, maxX - minX, boxH);
+          ctx.setLineDash([]);
+
+          // 3. Peak wick indicator (subtle mark at the exact candle extreme)
+          ctx.strokeStyle = isLong ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)';
+          ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.moveTo(targetX, yLevel);
-          ctx.lineTo(targetX, ySweep);
+          ctx.moveTo(minX + 2, ySweep);
+          ctx.lineTo(maxX - 2, ySweep);
           ctx.stroke();
+
+          // 4. Safe Stop-Loss Level with Protective Buffer (NEVER flush to the wick)
+          // Ensures at least a 12-16px visual safety margin and an algorithmic price buffer
+          const safeYSL = ySL !== null
+            ? (isLong ? Math.max(ySL, ySweep + 14) : Math.min(ySL, ySweep - 14))
+            : (isLong ? ySweep + 14 : ySweep - 14);
+
+          // Dotted connector from wick peak to safe SL level showing the protective buffer
+          ctx.strokeStyle = isLong ? 'rgba(14, 203, 129, 0.6)' : 'rgba(246, 70, 93, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.beginPath();
+          ctx.moveTo(centerX, ySweep);
+          ctx.lineTo(centerX, safeYSL);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Horizontal Stop-Loss bar at safe buffer distance
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(minX - 4, safeYSL);
+          ctx.lineTo(maxX + 4, safeYSL);
+          ctx.stroke();
+
+          // 5. Sleek "SL {price}" pill badge placed cleanly at the buffered Stop-Loss bar
+          const slText = `SL ${slPrice}`;
+          ctx.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+          const textWidth = ctx.measureText(slText).width;
+          const pillW = textWidth + 8;
+          const pillH = 14;
+          const pillX = centerX - pillW / 2;
+          const pillY = isLong ? safeYSL + 2 : safeYSL - pillH - 2;
+
+          ctx.fillStyle = theme === 'dark' ? 'rgba(15, 20, 25, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+          } else {
+            ctx.rect(pillX, pillY, pillW, pillH);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(slText, pillX + pillW / 2, pillY + pillH / 2);
+          ctx.textAlign = 'left';
         }
 
         // Sleek badge on the right edge with dark background
