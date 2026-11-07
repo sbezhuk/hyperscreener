@@ -142,6 +142,16 @@ export const Chart: React.FC<ChartProps> = ({
       window.removeEventListener('resize', handleResize);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleLogicalRangeChange);
       chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      zonesPrimitiveRef.current = null;
+      lastSetDataSeriesRef.current = null;
+      initializedRef.current = false;
+      prevContextRef.current = { coin: '', interval: '' };
+      prevCandlesLenRef.current = 0;
+      prevFirstCandleTimeRef.current = 0;
+      userHasScrolledHistoryRef.current = false;
+      priceLinesRef.current = [];
     };
   }, []);
 
@@ -170,6 +180,7 @@ export const Chart: React.FC<ChartProps> = ({
     });
   }, [isDark]);
 
+  const lastSetDataSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const prevCandlesLenRef = useRef<number>(0);
   const prevFirstCandleTimeRef = useRef<number>(0);
   const initializedRef = useRef<boolean>(false);
@@ -178,12 +189,14 @@ export const Chart: React.FC<ChartProps> = ({
   useEffect(() => {
     if (!candleSeriesRef.current || !chartRef.current || candles.length === 0) return;
 
+    const isSeriesChanged = lastSetDataSeriesRef.current !== candleSeriesRef.current;
     const isContextChanged =
       prevContextRef.current.coin !== coin ||
       prevContextRef.current.interval !== (interval || '');
 
     const firstCandleTime = candles[0]?.time || 0;
     const isPrependedEarlier =
+      !isSeriesChanged &&
       initializedRef.current &&
       !isContextChanged &&
       prevFirstCandleTimeRef.current !== 0 &&
@@ -215,6 +228,7 @@ export const Chart: React.FC<ChartProps> = ({
 
       try {
         candleSeriesRef.current.setData(mappedCandles);
+        lastSetDataSeriesRef.current = candleSeriesRef.current;
       } catch (err) {
         console.warn('Safely caught setData error during pagination:', err);
       }
@@ -225,12 +239,13 @@ export const Chart: React.FC<ChartProps> = ({
           to: currentRange.to + addedBars,
         });
       }
-    } else if (isContextChanged || !initializedRef.current) {
-      // First load or new coin / timeframe: fresh set, snap right to "Now"
+    } else if (isSeriesChanged || isContextChanged || !initializedRef.current) {
+      // First load, fresh chart series, or new coin / timeframe: fresh set, snap right to "Now"
       try {
         candleSeriesRef.current.setData(mappedCandles);
+        lastSetDataSeriesRef.current = candleSeriesRef.current;
       } catch (err) {
-        console.warn('Safely caught initial setData error:', err);
+        console.error('Error setting initial candle data:', err);
       }
       initializedRef.current = true;
       userHasScrolledHistoryRef.current = false;
@@ -266,11 +281,13 @@ export const Chart: React.FC<ChartProps> = ({
             candleSeriesRef.current.update(lastCandle);
           } catch (err) {
             candleSeriesRef.current.setData(mappedCandles);
+            lastSetDataSeriesRef.current = candleSeriesRef.current;
           }
         }
       } else {
         try {
           candleSeriesRef.current.setData(mappedCandles);
+          lastSetDataSeriesRef.current = candleSeriesRef.current;
         } catch (err) {
           console.warn('Safely caught periodic setData error:', err);
         }
