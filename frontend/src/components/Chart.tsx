@@ -79,6 +79,8 @@ export const Chart: React.FC<ChartProps> = ({
         borderColor: isDark ? '#1e2329' : '#e2e8f0',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 12,
+        shiftVisibleRangeOnNewBar: true,
       },
       rightPriceScale: {
         borderColor: isDark ? '#1e2329' : '#e2e8f0',
@@ -216,7 +218,7 @@ export const Chart: React.FC<ChartProps> = ({
         });
       }
     } else if (isContextChanged || !initializedRef.current) {
-      // First load or new coin / timeframe: fresh set, snap right with buffer
+      // First load or new coin / timeframe: fresh set, snap right to "Now"
       try {
         candleSeriesRef.current.setData(mappedCandles);
       } catch (err) {
@@ -226,9 +228,10 @@ export const Chart: React.FC<ChartProps> = ({
 
       const totalBars = mappedCandles.length;
       chartRef.current.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, totalBars - 120),
+        from: Math.max(0, totalBars - 100),
         to: totalBars + 12,
       });
+      chartRef.current.timeScale().scrollToRealTime();
 
       prevContextRef.current = { coin, interval: interval || '' };
     } else {
