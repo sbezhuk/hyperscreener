@@ -827,7 +827,8 @@ def _detect_smc_order_blocks(
                     latest_tested = c_time
 
                     for s_idx, sc in enumerate(subsequent):
-                        if sc["close"] < ob_bottom:
+                        if sc["close"] < ob_bottom - 0.5 * atr:
+                            # Decisive breakdown below zone
                             is_broken = True
                             break_idx = i + len(future_candles) + s_idx
                             latest_tested = sc.get("time", latest_tested)
@@ -836,16 +837,23 @@ def _detect_smc_order_blocks(
                             touches += 1
                             latest_tested = sc.get("time", latest_tested)
 
+                    # Check if break was a temporary false breakout / sweep that closed back above
+                    after_break = candles[break_idx + 1 : n] if break_idx >= 0 else []
+                    closed_back_above = any(ac["close"] >= ob_bottom for ac in after_break)
+                    if is_broken and closed_back_above:
+                        is_broken = False
+                        swept_liquidity = True
+
                     if not is_broken:
-                        # Clean active or mitigated Demand OB
-                        # Only valid as support when current price is strictly ABOVE the demand zone
-                        if current_price >= ob_top:
-                            is_mitigated = touches > 1
-                            # Touches logic in SMC:
-                            # 1 touch: fresh active POI
-                            # 2 touches: tested reaction
-                            # >= 3 touches: weakening (liquidity build-up target)
-                            if touches >= 3:
+                        # Clean active, retested, or swept Demand OB
+                        # Valid as support when price is above, inside, or piercing within false breakout tolerance
+                        if current_price >= ob_bottom - 1.5 * atr:
+                            is_pierced = current_price < ob_bottom
+                            is_mitigated = touches > 1 or is_pierced
+                            if is_pierced:
+                                status = "retested"
+                                swept_liquidity = True
+                            elif touches >= 3:
                                 status = "weakening"
                             elif is_mitigated:
                                 status = "retested"
@@ -988,7 +996,8 @@ def _detect_smc_order_blocks(
                     latest_tested = c_time
 
                     for s_idx, sc in enumerate(subsequent):
-                        if sc["close"] > ob_top:
+                        if sc["close"] > ob_top + 0.5 * atr:
+                            # Decisive breakout above zone
                             is_broken = True
                             break_idx = i + len(future_candles) + s_idx
                             latest_tested = sc.get("time", latest_tested)
@@ -997,12 +1006,23 @@ def _detect_smc_order_blocks(
                             touches += 1
                             latest_tested = sc.get("time", latest_tested)
 
+                    # Check if break was a temporary false breakout / sweep that closed back below
+                    after_break = candles[break_idx + 1 : n] if break_idx >= 0 else []
+                    closed_back_below = any(ac["close"] <= ob_top for ac in after_break)
+                    if is_broken and closed_back_below:
+                        is_broken = False
+                        swept_liquidity = True
+
                     if not is_broken:
-                        # Clean active or mitigated Supply OB
-                        # Only valid as resistance when current price is strictly BELOW the supply zone
-                        if current_price <= ob_bottom:
-                            is_mitigated = touches > 1
-                            if touches >= 3:
+                        # Clean active, retested, or swept Supply OB
+                        # Valid as resistance when price is below, inside, or piercing within false breakout tolerance
+                        if current_price <= ob_top + 1.5 * atr:
+                            is_pierced = current_price > ob_top
+                            is_mitigated = touches > 1 or is_pierced
+                            if is_pierced:
+                                status = "retested"
+                                swept_liquidity = True
+                            elif touches >= 3:
                                 status = "weakening"
                             elif is_mitigated:
                                 status = "retested"
@@ -1160,11 +1180,10 @@ def _detect_smc_liquidity_pools(
                 # If swept and price has drifted far away, pool liquidity is exhausted
                 if is_swept and abs(avg_px - current_price) > 3.0 * atr:
                     continue
-
-                # BSL (Buy-side Liquidity) acts as overhead resistance above current price
-                if avg_px <= current_price:
+                # If price has broken far above (> 1.5 ATR above top), pool is broken
+                if current_price > top + 1.5 * atr:
                     continue
-                bottom = max(avg_px - 0.25 * atr, current_price + 0.05 * atr)
+
                 zone_type = "resistance"
 
                 ratio = (avg_px - range_low) / range_span
@@ -1228,11 +1247,10 @@ def _detect_smc_liquidity_pools(
                 # If swept and price drifted far away, pool is exhausted
                 if is_swept and abs(avg_px - current_price) > 3.0 * atr:
                     continue
-
-                # SSL (Sell-side Liquidity) acts as underlying support below current price
-                if avg_px >= current_price:
+                # If price has broken far below (> 1.5 ATR below bottom), pool is broken
+                if current_price < bottom - 1.5 * atr:
                     continue
-                top = min(avg_px + 0.25 * atr, current_price - 0.05 * atr)
+
                 zone_type = "support"
 
                 ratio = (avg_px - range_low) / range_span
@@ -1348,9 +1366,8 @@ def analyze_levels(
     structural_swings: List[Dict[str, Any]] = []
     for h in swings.get("highs", []):
         px = h["price"]
-        if px > current_price:
+        if current_price <= px + 1.5 * atr and px >= current_price - 1.0 * atr:
             half_w = max(0.20 * atr, px * 0.0008)
-            lower_p = max(px - half_w, current_price + 0.05 * atr)
             ratio = (px - range_low) / range_span
             loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
             str_info = compute_smc_zone_strength(
@@ -1363,13 +1380,13 @@ def analyze_levels(
             structural_swings.append({
                 "center_price": round(px, decimals),
                 "upper_price": round(px + half_w, decimals),
-                "lower_price": round(lower_p, decimals),
+                "lower_price": round(px - half_w, decimals),
                 "touches_count": 1,
                 "average_bounce_atr": 1.2,
                 "volume_confirmation": 0.7,
                 "strength_score": str_info["strength_score"],
                 "strength_category": str_info["strength_category"],
-                "status": "active",
+                "status": "retested" if current_price > px else "active",
                 "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
                 "type": "resistance",
                 "timeframe": interval,
@@ -1382,9 +1399,8 @@ def analyze_levels(
 
     for l in swings.get("lows", []):
         px = l["price"]
-        if px < current_price:
+        if current_price >= px - 1.5 * atr and px <= current_price + 1.0 * atr:
             half_w = max(0.20 * atr, px * 0.0008)
-            upper_p = min(px + half_w, current_price - 0.05 * atr)
             ratio = (px - range_low) / range_span
             loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
             str_info = compute_smc_zone_strength(
@@ -1396,14 +1412,14 @@ def analyze_levels(
             )
             structural_swings.append({
                 "center_price": round(px, decimals),
-                "upper_price": round(upper_p, decimals),
+                "upper_price": round(px + half_w, decimals),
                 "lower_price": round(px - half_w, decimals),
                 "touches_count": 1,
                 "average_bounce_atr": 1.2,
                 "volume_confirmation": 0.7,
                 "strength_score": str_info["strength_score"],
                 "strength_category": str_info["strength_category"],
-                "status": "active",
+                "status": "retested" if current_price < px else "active",
                 "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
                 "type": "support",
                 "timeframe": interval,
@@ -1431,7 +1447,12 @@ def analyze_levels(
         for label, px in pivot_items:
             if px is None or px <= 0:
                 continue
-            zone_type = "resistance" if px >= current_price else "support"
+            if label.startswith("S"):
+                zone_type = "support" if current_price >= px - 1.5 * atr else "resistance"
+            elif label.startswith("R"):
+                zone_type = "support" if current_price >= px else "resistance"
+            else:
+                zone_type = "support" if current_price >= px - 0.5 * atr else "resistance"
             status = "retested" if (label.startswith("R") and px < current_price) or (label.startswith("S") and px > current_price) else "active"
             half_w = max(0.25 * atr, px * 0.0008)
             pivot_candidates.append({
@@ -1460,17 +1481,16 @@ def analyze_levels(
     for c in all_candidates:
         formatted_candidates.append(_add_legacy_fields(c, current_price))
 
-    # Separate into resistances (above current price) and supports (below current price)
-    # Strict SMC Dealing Range Separation:
-    # A resistance MUST reside strictly ABOVE current price (bottom >= current_price)
-    # A support MUST reside strictly BELOW current price (top <= current_price)
+    # Separate into resistances (overhead / tested / swept) and supports (underlying / tested / swept)
+    # Allows realistic price interaction: price inside zone, or piercing within false breakout tolerance (1.5 * ATR)
+    pierce_tol = 1.5 * atr
     resistances_pool = [
         c for c in formatted_candidates
-        if c["type"] == "resistance" and c["bottom"] >= current_price and c["price"] > current_price
+        if c["type"] == "resistance" and current_price <= c["upper_price"] + pierce_tol and c["center_price"] >= current_price - 1.0 * atr
     ]
     supports_pool = [
         c for c in formatted_candidates
-        if c["type"] == "support" and c["top"] <= current_price and c["price"] < current_price
+        if c["type"] == "support" and current_price >= c["lower_price"] - pierce_tol and c["center_price"] <= current_price + 1.0 * atr
     ]
 
     # Spacing and Confluence Selection:
@@ -1588,32 +1608,39 @@ def analyze_levels(
     clean_supports.sort(key=lambda s: s["price"], reverse=True)
 
     # Cross-Polarity Non-Collision Invariant:
-    # Under NO circumstances can a resistance and a support occupy the same level or overlap!
-    min_dealing_gap = max(0.8 * atr, current_price * 0.006)
-    while clean_resistances and clean_supports and (clean_resistances[0]["bottom"] < clean_supports[0]["top"] + min_dealing_gap):
-        # A collision occurred: resistance bottom is too close to or below support top!
-        # Eliminate the inner candidate that is local chop closer to current price
+    # A resistance must reside strictly above support and their price zones cannot collide or overlap!
+    while clean_resistances and clean_supports and (
+        clean_resistances[0]["price"] <= clean_supports[0]["price"]
+        or clean_resistances[0]["bottom"] < clean_supports[0]["top"]
+    ):
+        # A collision occurred: resistance and support bands overlap or cross over!
+        # Retain the level closer to current price (the one being actively tested/interacted with)
         dist_r = abs(clean_resistances[0]["price"] - current_price)
         dist_s = abs(clean_supports[0]["price"] - current_price)
-        if dist_r <= dist_s:
+        if dist_s < dist_r:
             clean_resistances.pop(0)
-        else:
+        elif dist_r < dist_s:
             clean_supports.pop(0)
+        else:
+            if clean_resistances[0].get("strength_score", 0) >= clean_supports[0].get("strength_score", 0):
+                clean_supports.pop(0)
+            else:
+                clean_resistances.pop(0)
 
     # Dynamic Discovery: if no supports or resistances exist (e.g. price at ATH, ATL, or after collision pruning)
     if not clean_supports:
-        candidate_lows = [s for s in swings.get("lows", []) if s["price"] < current_price - 0.2 * atr]
+        candidate_lows = [s for s in swings.get("lows", []) if s["price"] <= current_price + 0.5 * atr]
         if candidate_lows:
-            candidate_lows.sort(key=lambda s: s["time"], reverse=True)
+            candidate_lows.sort(key=lambda s: abs(s["price"] - current_price))
             chosen_l = candidate_lows[0]["price"]
             s_time = candidate_lows[0].get("time", candles[-1]["time"] if candles else 0)
         else:
-            recent_lows = [c["low"] for c in candles[-min(len(candles), 50):] if c["low"] < current_price - 0.2 * atr]
+            recent_lows = [c["low"] for c in candles[-min(len(candles), 50):] if c["low"] <= current_price + 0.5 * atr]
             chosen_l = min(recent_lows) if recent_lows else current_price - 1.5 * atr
             s_time = candles[-1].get("time", 0) if candles else 0
 
         half_w = max(0.25 * atr, chosen_l * 0.0008)
-        u_p = min(chosen_l + half_w, current_price - 0.05 * atr)
+        u_p = chosen_l + half_w
         ratio = (chosen_l - range_low) / range_span
         loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
         str_info = compute_smc_zone_strength(
@@ -1645,18 +1672,18 @@ def analyze_levels(
         clean_supports.append(_add_legacy_fields(zone, current_price))
 
     if not clean_resistances:
-        candidate_highs = [s for s in swings.get("highs", []) if s["price"] > current_price + 0.2 * atr]
+        candidate_highs = [s for s in swings.get("highs", []) if s["price"] >= current_price - 0.5 * atr]
         if candidate_highs:
-            candidate_highs.sort(key=lambda s: s["time"], reverse=True)
+            candidate_highs.sort(key=lambda s: abs(s["price"] - current_price))
             chosen_h = candidate_highs[0]["price"]
             r_time = candidate_highs[0].get("time", candles[-1]["time"] if candles else 0)
         else:
-            recent_highs = [c["high"] for c in candles[-min(len(candles), 50):] if c["high"] > current_price + 0.2 * atr]
+            recent_highs = [c["high"] for c in candles[-min(len(candles), 50):] if c["high"] >= current_price - 0.5 * atr]
             chosen_h = max(recent_highs) if recent_highs else current_price + 1.5 * atr
             r_time = candles[-1].get("time", 0) if candles else 0
 
         half_w = max(0.25 * atr, chosen_h * 0.0008)
-        l_p = max(chosen_h - half_w, current_price + 0.05 * atr)
+        l_p = chosen_h - half_w
         ratio = (chosen_h - range_low) / range_span
         loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
         str_info = compute_smc_zone_strength(
@@ -1686,6 +1713,20 @@ def analyze_levels(
             "zone_location": loc,
         }
         clean_resistances.append(_add_legacy_fields(zone, current_price))
+
+    # Tag swept / pierced levels accurately
+    for s in clean_supports:
+        if current_price < s["lower_price"] or (candles and candles[-1]["low"] < s["lower_price"]):
+            s["swept_liquidity"] = True
+            s["is_pierced"] = True
+            if s.get("status") == "active":
+                s["status"] = "retested"
+    for r in clean_resistances:
+        if current_price > r["upper_price"] or (candles and candles[-1]["high"] > r["upper_price"]):
+            r["swept_liquidity"] = True
+            r["is_pierced"] = True
+            if r.get("status") == "active":
+                r["status"] = "retested"
 
     # Final re-sort to ensure correct order
     clean_resistances.sort(key=lambda r: r["price"])
