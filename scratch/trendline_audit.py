@@ -31,7 +31,7 @@ async def run_audit():
     regimes_checked = {}
 
     target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
-    target_tfs = await resolve_research_timeframes(["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"])
+    target_tfs = await resolve_research_timeframes()
     print(f"Universally discovered assets: {target_coins}")
     print(f"Universally supported timeframes: {target_tfs}")
 

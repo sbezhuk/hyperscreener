@@ -48,60 +48,70 @@ class MarketDiscoveryError(Exception):
     pass
 
 
+# Centralized Working Timeframe Definition for Hyperscreener Research Pipeline
+TIMEFRAMES: List[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
+WORKING_TIMEFRAMES: List[str] = TIMEFRAMES
+
+TIMEFRAME_STEPS_SECONDS: Dict[str, int] = {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "1h": 3600,
+    "4h": 14400,
+    "1d": 86400,
+}
+
+HTF_MAPPING: Dict[str, str] = {
+    "1m": "5m",
+    "5m": "15m",
+    "15m": "1h",
+    "1h": "4h",
+    "4h": "1d",
+    "1d": "1d",
+}
+
+DEFAULT_TIMEFRAME_LIMITS: Dict[str, int] = {
+    "1m": 3000,
+    "5m": 2000,
+    "15m": 1500,
+    "1h": 1500,
+    "4h": 1500,
+    "1d": 1000,
+}
+
+
 def discover_supported_timeframes() -> List[str]:
     """
-    Universal Timeframe Discovery:
-    Returns the deterministic, supported timeframe universe provided by Hyperliquid.
-    No hardcoded, fragmented lists across research phases.
+    Centralized Working Timeframe Discovery for Hyperscreener Research Pipeline:
+    Exclusively returns the 6 validated operational timeframes:
+    ['1m', '5m', '15m', '1h', '4h', '1d']
+    No obsolete intervals or unapproved timeframes are permitted.
     """
-    return ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d"]
+    return list(WORKING_TIMEFRAMES)
 
 
 def get_timeframe_step_seconds(interval: str) -> int:
     """Returns interval step in seconds for boundary and gap calculations."""
-    tf_map = {
-        "1m": 60,
-        "3m": 180,
-        "5m": 300,
-        "15m": 900,
-        "30m": 1800,
-        "1h": 3600,
-        "2h": 7200,
-        "4h": 14400,
-        "8h": 28800,
-        "12h": 43200,
-        "1d": 86400,
-    }
-    clean = interval.lower()
-    return tf_map.get(clean, 900)
+    clean = interval.lower().strip()
+    if clean not in TIMEFRAME_STEPS_SECONDS:
+        raise ValueError(f"Unsupported timeframe '{interval}'. Must be one of approved TIMEFRAMES: {WORKING_TIMEFRAMES}")
+    return TIMEFRAME_STEPS_SECONDS[clean]
 
 
 def get_htf_for_timeframe(interval: str) -> str:
     """
-    Standard Higher Timeframe (HTF) context mapping for multi-timeframe analysis:
-      1m -> 5m
-      3m -> 15m
-      5m -> 1h
+    Standard Higher Timeframe (HTF) context mapping for working timeframes:
+      1m  -> 5m
+      5m  -> 15m
       15m -> 1h
-      30m -> 4h
-      1h -> 4h
-      4h -> 1d
-      1d -> 1d
+      1h  -> 4h
+      4h  -> 1d
+      1d  -> 1d
     """
-    mapping = {
-        "1m": "5m",
-        "3m": "15m",
-        "5m": "1h",
-        "15m": "1h",
-        "30m": "4h",
-        "1h": "4h",
-        "2h": "4h",
-        "4h": "1d",
-        "8h": "1d",
-        "12h": "1d",
-        "1d": "1d",
-    }
-    return mapping.get(interval.lower(), "1h")
+    clean = interval.lower().strip()
+    if clean not in HTF_MAPPING:
+        raise ValueError(f"Unsupported timeframe '{interval}'. Must be one of approved TIMEFRAMES: {WORKING_TIMEFRAMES}")
+    return HTF_MAPPING[clean]
 
 
 async def discover_available_assets(
@@ -295,17 +305,25 @@ def _get_dataset_cache_path(coin: str, timeframe: str) -> str:
 async def get_single_dataset(
     coin: str,
     timeframe: str,
-    limit: int = 1500,
+    limit: Optional[int] = None,
     force_refresh: bool = False,
     max_age_seconds: int = 3600,
+    exclude_unclosed: bool = True,
 ) -> Dict[str, Any]:
     """
     Isolated Dataset Loader:
     - Loads or fetches a specific (coin, timeframe) pair.
-    - Validates data quality.
+    - Validates data quality and Point-in-Time safety.
     - Caches into isolated per-asset/per-timeframe JSON store.
     """
-    cache_file = _get_dataset_cache_path(coin, timeframe)
+    clean_tf = timeframe.lower().strip()
+    if clean_tf not in WORKING_TIMEFRAMES:
+        raise ValueError(f"Unsupported timeframe '{timeframe}'. Must be one of approved TIMEFRAMES: {WORKING_TIMEFRAMES}")
+
+    if limit is None:
+        limit = DEFAULT_TIMEFRAME_LIMITS.get(clean_tf, 1500)
+
+    cache_file = _get_dataset_cache_path(coin, clean_tf)
     now = time.time()
 
     # 1. Attempt reading fresh isolated cache
@@ -319,7 +337,7 @@ async def get_single_dataset(
                 quality = meta.get("quality", {})
                 return {
                     "coin": coin.upper(),
-                    "timeframe": timeframe.lower(),
+                    "timeframe": clean_tf,
                     "candles": cached["candles"],
                     "quality": quality,
                     "from_cache": True,
@@ -328,14 +346,21 @@ async def get_single_dataset(
             pass
 
     # 2. Fetch fresh candles from exchange
-    candles = await hl_client.get_candles(coin=coin, interval=timeframe, limit=limit)
+    candles = await hl_client.get_candles(coin=coin, interval=clean_tf, limit=limit)
     if not candles:
         # Retry once
         await asyncio.sleep(0.1)
-        candles = await hl_client.get_candles(coin=coin, interval=timeframe, limit=limit)
+        candles = await hl_client.get_candles(coin=coin, interval=clean_tf, limit=limit)
 
     candles = candles or []
-    quality = validate_candle_data_quality(candles, interval=timeframe)
+
+    # Point-in-Time protection: exclude unclosed candle if requested
+    if exclude_unclosed and candles:
+        step = get_timeframe_step_seconds(clean_tf)
+        if candles[-1]["time"] + step > now:
+            candles = candles[:-1]
+
+    quality = validate_candle_data_quality(candles, interval=clean_tf)
 
     # 3. Store into isolated cache file
     if candles and quality["is_valid"]:
@@ -344,7 +369,7 @@ async def get_single_dataset(
                 "metadata": {
                     "exchange": "hyperliquid",
                     "coin": coin.upper(),
-                    "timeframe": timeframe.lower(),
+                    "timeframe": clean_tf,
                     "version": "2.0",
                     "created_at": now,
                     "updated_at": now,
@@ -358,11 +383,11 @@ async def get_single_dataset(
             with open(cache_file, "w") as f:
                 json.dump(payload, f)
         except Exception as e:
-            print(f"Warning: Failed to cache dataset {coin} {timeframe}: {e}")
+            print(f"Warning: Failed to cache dataset {coin} {clean_tf}: {e}")
 
     return {
         "coin": coin.upper(),
-        "timeframe": timeframe.lower(),
+        "timeframe": clean_tf,
         "candles": candles,
         "quality": quality,
         "from_cache": False,
@@ -477,9 +502,15 @@ def resolve_research_timeframes(
     """
     Universally resolves supported timeframes without static lists.
     Returns an AwaitableList which can be either awaited or used directly as a list.
+    Strictly verifies that requested intervals belong to the 6 approved TIMEFRAMES.
     """
     if tfs_arg and len(tfs_arg) > 0:
-        res = [t.lower().strip() for t in tfs_arg]
+        res = []
+        for t in tfs_arg:
+            clean = t.lower().strip()
+            if clean not in WORKING_TIMEFRAMES:
+                raise ValueError(f"Timeframe '{t}' is not an approved working timeframe. Approved: {WORKING_TIMEFRAMES}")
+            res.append(clean)
     else:
         res = discover_supported_timeframes()
     return AwaitableList(res)

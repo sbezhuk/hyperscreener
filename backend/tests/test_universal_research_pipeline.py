@@ -73,21 +73,31 @@ class TestUniversalResearchPipeline(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("OLD_DELISTED", names, "Delisted instruments must be excluded")
 
     def test_3_supported_timeframes_discovery(self):
-        """3. Universal supported timeframes include all exchange capabilities without phase fragmentation."""
+        """3. Universal supported timeframes strictly contain the 6 approved working intervals."""
         tfs = discover_supported_timeframes()
-        self.assertIn("1m", tfs)
-        self.assertIn("5m", tfs)
-        self.assertIn("15m", tfs)
-        self.assertIn("1h", tfs)
-        self.assertIn("4h", tfs)
-        self.assertIn("1d", tfs)
-        # Check step seconds helper
+        self.assertEqual(tfs, ["1m", "5m", "15m", "1h", "4h", "1d"])
+        
+        # Check step seconds helper for all 6 intervals
+        self.assertEqual(get_timeframe_step_seconds("1m"), 60)
+        self.assertEqual(get_timeframe_step_seconds("5m"), 300)
         self.assertEqual(get_timeframe_step_seconds("15m"), 900)
         self.assertEqual(get_timeframe_step_seconds("1h"), 3600)
+        self.assertEqual(get_timeframe_step_seconds("4h"), 14400)
+        self.assertEqual(get_timeframe_step_seconds("1d"), 86400)
+        
         # Check HTF hierarchy mapping
+        self.assertEqual(get_htf_for_timeframe("1m"), "5m")
+        self.assertEqual(get_htf_for_timeframe("5m"), "15m")
         self.assertEqual(get_htf_for_timeframe("15m"), "1h")
         self.assertEqual(get_htf_for_timeframe("1h"), "4h")
         self.assertEqual(get_htf_for_timeframe("4h"), "1d")
+        self.assertEqual(get_htf_for_timeframe("1d"), "1d")
+        
+        # Check rejection of unapproved timeframe
+        with self.assertRaises(ValueError):
+            get_timeframe_step_seconds("3m")
+        with self.assertRaises(ValueError):
+            get_htf_for_timeframe("2h")
 
     async def test_4_missing_data_for_one_timeframe_does_not_halt_pipeline(self):
         """4. Missing candles for one asset/timeframe do not halt execution of other combinations."""

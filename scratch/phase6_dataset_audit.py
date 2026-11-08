@@ -29,9 +29,9 @@ async def main():
     print(f"Total active perpetuals (> $1M vol): {len(active_assets)}")
     print(f"Total supported timeframes: {len(supported_tfs)} ({', '.join(supported_tfs)})")
 
-    # Audit the top liquid universe (e.g. top 10 liquid assets across target timeframes)
-    target_coins = [a["name"] for a in active_assets[:10]]
-    audit_tfs = resolve_research_timeframes(["15m", "1h", "4h"])
+    # Audit liquid universe across ALL 6 working timeframes
+    target_coins = [a["name"] for a in active_assets[:8]]
+    audit_tfs = resolve_research_timeframes()
 
     print(f"\nExecuting Dataset Audit for top universe: {target_coins} across {audit_tfs}...")
     universe_result = await fetch_research_universe(
