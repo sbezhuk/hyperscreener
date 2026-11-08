@@ -134,6 +134,17 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                         >
                           {item.trend}
                         </span>
+                        {item.tradeSetup && item.tradeSetup.action !== 'WAIT' && item.tradeSetup.risk_reward && item.tradeSetup.risk_reward >= 3.0 && (
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                              item.tradeSetup.direction === 'LONG'
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                            }`}
+                          >
+                            {item.tradeSetup.direction} RR 1:{item.tradeSetup.risk_reward.toFixed(1)}
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs font-semibold text-slate-700 dark:text-gray-300">
                         ${item.currentPrice < 1 ? item.currentPrice.toFixed(4) : item.currentPrice.toFixed(2)}
@@ -172,15 +183,24 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                       )}
                     </div>
 
-                    {/* First Signal Preview */}
-                    {item.signals[0] && (
+                    {/* Trade Setup / Signal Preview */}
+                    {item.tradeSetup && item.tradeSetup.action !== 'WAIT' && item.tradeSetup.entry_price !== null ? (
+                      <div className="mt-1.5 text-[10px] text-slate-600 dark:text-gray-300 font-mono line-clamp-1 bg-white dark:bg-[#0b0e11] px-2 py-1 rounded border border-slate-200/80 dark:border-transparent flex items-center justify-between">
+                        <span className={item.tradeSetup.direction === 'LONG' ? 'text-emerald-600 dark:text-[#0ecb81] font-bold' : 'text-rose-600 dark:text-[#f6465d] font-bold'}>
+                          [{item.tradeSetup.direction}] Вхід: ${item.tradeSetup.entry_price}
+                        </span>
+                        <span>SL: ${item.tradeSetup.stop_loss}</span>
+                        <span>TP: ${item.tradeSetup.take_profit}</span>
+                        <span className="font-bold text-emerald-600 dark:text-[#0ecb81]">1:{item.tradeSetup.risk_reward?.toFixed(1)}</span>
+                      </div>
+                    ) : item.signals[0] ? (
                       <div className="mt-1.5 text-[10px] text-slate-600 dark:text-gray-400 font-sans line-clamp-1 bg-white dark:bg-[#0b0e11] px-2 py-1 rounded border border-slate-200/80 dark:border-transparent">
                         <span className={item.signals[0].direction === 'LONG' ? 'text-emerald-600 dark:text-[#0ecb81]' : 'text-rose-600 dark:text-[#f6465d]'}>
                           [{item.signals[0].direction}]
                         </span>{' '}
                         {item.signals[0].title}: {item.signals[0].desc}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })

@@ -927,6 +927,7 @@ export function App() {
               onlyConfirmedOi={onlyConfirmedOi}
               onClose={() => setIsSidebarOpen(false)}
               pivotPoints={analysis?.levels?.pivot_points}
+              tradeSetup={analysis?.tradeSetup || analysis?.summarySignal}
             />
           </div>
         )}
@@ -957,6 +958,7 @@ export function App() {
                 onlyConfirmedOi={onlyConfirmedOi}
                 onClose={() => setIsSidebarOpen(false)}
                 pivotPoints={analysis?.levels?.pivot_points}
+                tradeSetup={analysis?.tradeSetup || analysis?.summarySignal}
               />
             </div>
           </div>

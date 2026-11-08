@@ -1,6 +1,6 @@
-import React from 'react';
-import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData, formatOiDeltaPct, PivotPointsData } from '../types';
-import { Activity, BarChart2, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData, formatOiDeltaPct, PivotPointsData, TradeSetup } from '../types';
+import { Activity, BarChart2, X, TrendingUp, TrendingDown, Target, Shield, CheckCircle2, AlertCircle, Compass, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface SidebarLevelsProps {
   resistances: LevelItem[];
@@ -15,6 +15,7 @@ interface SidebarLevelsProps {
   onlyConfirmedOi?: boolean;
   onClose?: () => void;
   pivotPoints?: PivotPointsData;
+  tradeSetup?: TradeSetup;
 }
 
 export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
@@ -30,6 +31,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   onlyConfirmedOi = false,
   onClose,
   pivotPoints,
+  tradeSetup,
 }) => {
   const filteredSignals = signals.filter((sig) => {
     if (activeFormation === 'NONE') return false;
@@ -47,6 +49,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   });
 
   const allLevelsCount = resistances.length + supports.length;
+  const [isDetailsOpen, setIsDetailsOpen] = useState(true);
 
   return (
     <aside className="w-full h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors overflow-hidden">
@@ -66,10 +69,193 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
           </button>
         </div>
       )}
+
+      {/* Unified Scrollable Container for All Sidebar Content */}
+      <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-slate-200 dark:divide-[#1e2329]">
+        {/* 0. SUMMARY TRADE SIGNAL & SETUP (RR >= 1:3) */}
+        {tradeSetup && (
+          <div className="p-3 bg-gradient-to-b from-slate-50 to-white dark:from-[#13171d] dark:to-[#0e1114]">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-slate-500 dark:text-gray-400 font-semibold flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                <Compass className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+                ТОРГОВИЙ СИГНАЛ · ПІДСУМОК
+              </span>
+              <div className="flex items-center gap-1">
+                {tradeSetup.risk_reward && tradeSetup.risk_reward >= 3.0 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-[#0ecb81] border border-emerald-500/30">
+                    RR 1:{tradeSetup.risk_reward.toFixed(1)} ✓
+                  </span>
+                )}
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    tradeSetup.confluence_score >= 70
+                      ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30'
+                      : 'bg-slate-200 dark:bg-[#1f242d] text-slate-600 dark:text-gray-400'
+                  }`}
+                  title="Оцінка конфлюенсу формацій"
+                >
+                  ЗБІГ {tradeSetup.confluence_score}/100
+                </span>
+                <button
+                  onClick={() => setIsDetailsOpen(!isDetailsOpen)}
+                  className="p-0.5 ml-0.5 rounded hover:bg-slate-200 dark:hover:bg-[#1f242d] text-slate-400 hover:text-slate-600 dark:hover:text-gray-200 transition"
+                  title={isDetailsOpen ? "Згорнути деталі" : "Розгорнути деталі"}
+                >
+                  {isDetailsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+          {/* Main Action Banner */}
+          <div
+            className={`p-2.5 rounded-lg border flex flex-col gap-2 transition-all ${
+              tradeSetup.direction === 'LONG'
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-500/40'
+                : tradeSetup.direction === 'SHORT'
+                ? 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-300 dark:border-rose-500/40'
+                : 'bg-slate-100/70 dark:bg-[#161a20] border-slate-300 dark:border-[#262c36]'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {tradeSetup.direction === 'LONG' ? (
+                  <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-[#0ecb81]" />
+                ) : tradeSetup.direction === 'SHORT' ? (
+                  <TrendingDown className="w-5 h-5 text-rose-600 dark:text-[#f6465d]" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
+                )}
+                <div>
+                  <div
+                    className={`font-black text-xs sm:text-sm tracking-wide ${
+                      tradeSetup.direction === 'LONG'
+                        ? 'text-emerald-700 dark:text-[#0ecb81]'
+                        : tradeSetup.direction === 'SHORT'
+                        ? 'text-rose-700 dark:text-[#f6465d]'
+                        : 'text-slate-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {tradeSetup.recommendation_title}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-gray-400">
+                    {tradeSetup.primary_trigger || tradeSetup.status_label}
+                  </div>
+                </div>
+              </div>
+
+              {tradeSetup.risk_reward && (
+                <div className="text-right">
+                  <div className="text-[10px] text-slate-400 uppercase font-sans">Співвідношення</div>
+                  <div className="text-xs font-mono font-black text-emerald-600 dark:text-[#0ecb81]">
+                    1 : {tradeSetup.risk_reward.toFixed(1)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Entry, SL, TP Grid if setup is active */}
+            {tradeSetup.entry_price !== null && tradeSetup.stop_loss !== null && tradeSetup.take_profit !== null ? (
+              <div className="pt-2 border-t border-slate-200/80 dark:border-[#222832] space-y-2">
+                <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                  {/* Entry Card */}
+                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-slate-200 dark:border-[#242b36] flex flex-col">
+                    <span className="text-[9px] text-slate-400 dark:text-gray-500 font-sans flex items-center gap-1">
+                      <Target className="w-2.5 h-2.5 text-blue-500" /> ВХІД
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white mt-0.5 truncate">
+                      ${tradeSetup.entry_price}
+                    </span>
+                    {tradeSetup.entry_range && (
+                      <span className="text-[9px] text-slate-400 truncate mt-0.5" title="Рекомендований діапазон входу">
+                        {tradeSetup.entry_range[0]} - {tradeSetup.entry_range[1]}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Stop Loss Card */}
+                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-rose-200 dark:border-rose-950/60 flex flex-col">
+                    <span className="text-[9px] text-rose-500 font-sans flex items-center gap-1">
+                      <Shield className="w-2.5 h-2.5 text-rose-500" /> СТОП (SL)
+                    </span>
+                    <span className="font-bold text-[#f6465d] mt-0.5 truncate">
+                      ${tradeSetup.stop_loss}
+                    </span>
+                    <span className="text-[9px] text-rose-500/80 font-bold mt-0.5">
+                      -{tradeSetup.risk_pct}%
+                    </span>
+                  </div>
+
+                  {/* Take Profit Card */}
+                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-emerald-200 dark:border-emerald-950/60 flex flex-col">
+                    <span className="text-[9px] text-emerald-500 font-sans flex items-center gap-1">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" /> ТЕЙК (TP)
+                    </span>
+                    <span className="font-bold text-[#0ecb81] mt-0.5 truncate">
+                      ${tradeSetup.take_profit}
+                    </span>
+                    <span className="text-[9px] text-emerald-500 font-bold mt-0.5">
+                      +{tradeSetup.reward_pct}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Confluence Factors list (collapsible with isDetailsOpen) */}
+                {isDetailsOpen && tradeSetup.confluence_factors && tradeSetup.confluence_factors.length > 0 && (
+                  <div className="bg-white/60 dark:bg-[#101419]/60 p-1.5 rounded border border-slate-200/60 dark:border-[#1e242d] space-y-1">
+                    <div className="text-[10px] font-semibold text-slate-600 dark:text-gray-400 flex items-center justify-between">
+                      <span>КОНФЛЮЕНС ФОРМАЦІЙ ({tradeSetup.confluence_factors.length}):</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-normal">Мінімум RR 1:3 враховано</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {tradeSetup.confluence_factors.map((f, idx) => (
+                        <span
+                          key={idx}
+                          className="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 dark:bg-[#181d24] text-slate-700 dark:text-gray-300 border border-slate-200 dark:border-[#252b36] flex items-center gap-1"
+                          title={f.desc}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {f.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* When in WAIT mode */
+              <div className="pt-1.5 border-t border-slate-200/80 dark:border-[#222832] text-[11px] text-slate-600 dark:text-gray-400 leading-snug">
+                <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                  <span className="text-slate-400">Потенціал Long:</span>
+                  <span className={tradeSetup.long_potential?.rr && tradeSetup.long_potential.rr >= 3.0 ? 'text-[#0ecb81] font-bold' : 'text-slate-400'}>
+                    {tradeSetup.long_potential?.rr ? `RR 1:${tradeSetup.long_potential.rr.toFixed(1)}` : 'Немає запасу'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-mono mb-1.5">
+                  <span className="text-slate-400">Потенціал Short:</span>
+                  <span className={tradeSetup.short_potential?.rr && tradeSetup.short_potential.rr >= 3.0 ? 'text-[#f6465d] font-bold' : 'text-slate-400'}>
+                    {tradeSetup.short_potential?.rr ? `RR 1:${tradeSetup.short_potential.rr.toFixed(1)}` : 'Немає запасу'}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-gray-400 italic">
+                  {tradeSetup.summary_comment}
+                </div>
+              </div>
+            )}
+
+            {/* Narrative summary comment if active and open */}
+            {isDetailsOpen && tradeSetup.entry_price !== null && (
+              <div className="text-[10px] text-slate-600 dark:text-gray-300 leading-tight bg-slate-100/60 dark:bg-[#12161c] p-1.5 rounded border border-slate-200 dark:border-[#1e2329]">
+                💡 <span className="font-medium">{tradeSetup.summary_comment}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* 1. Market Structure & Trend Header */}
       {structure && (
-        <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/70 dark:bg-[#15191e]/50 flex-shrink-0">
+        <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/70 dark:bg-[#15191e]/50">
           <div className="flex items-center justify-between mb-1">
             <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
               <Activity className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /> СТРУКТУРА ТА ТРЕНД
@@ -112,7 +298,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
       )}
 
       {/* 2. Open Interest (OI) Delta & Breakout Confirmation */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/50 dark:bg-[#15191e]/40 flex-shrink-0">
+      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/50 dark:bg-[#15191e]/40">
         <div className="flex items-center justify-between mb-2">
           <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
             <BarChart2 className="w-3.5 h-3.5 text-emerald-500" /> ДЕТЕКЦІЯ OI DELTA
@@ -267,7 +453,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
       </div>
 
       {/* 3. Found Formations Section */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] flex-shrink-0">
+      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329]">
         <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
           <span>ЗНАЙДЕНІ ФОРМАЦІЇ · {filteredSignals.length}</span>
         </div>
@@ -554,7 +740,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
       </div>
 
       {/* 4. Lines & Zones on Chart Section */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col">
+      <div className="p-3 flex flex-col">
         {/* Smart Money Concepts (SMC) Summary Card */}
         <div className="mb-3 p-2 rounded bg-slate-50 dark:bg-[#12161c] border border-slate-200 dark:border-[#1e2329] text-[11px]">
           <div className="flex items-center justify-between font-semibold text-slate-700 dark:text-gray-300 mb-1.5">
@@ -767,6 +953,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
             <div className="text-slate-400 dark:text-gray-600 text-center py-4">Зон не виявлено</div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Bottom Explanatory Help */}

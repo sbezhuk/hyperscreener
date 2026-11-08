@@ -17,6 +17,7 @@ from .trendline import (
 )
 from .mtf_trendline import mtf_trendline_manager, HTF_TIMEFRAME_MAP
 from .structure import analyze_market_structure
+from .trade_setup import generate_trade_setup
 
 
 def _get_trendline_price_at_bar(tl: Dict[str, Any], target_bar_idx: int) -> float:
@@ -880,6 +881,22 @@ async def analyze_coin_data(
         coin=coin,
     )
 
+    # 8. Synthesize Formations into an Actionable Trade Setup (RR >= 1:3 Summary Signal)
+    trade_setup = generate_trade_setup(
+        coin=coin,
+        interval=interval,
+        current_price=current_price,
+        candles=candles,
+        levels=levels_data,
+        fvgs=fvgs,
+        trendlines=active_tls,
+        liquidity=liquidity_data,
+        structure=structure_data,
+        oi_summary=oi_summary,
+        signals=signals,
+        min_rr_threshold=3.0,
+    )
+
     return {
         "coin": coin,
         "interval": interval,
@@ -897,7 +914,10 @@ async def analyze_coin_data(
         "liquidity": liquidity_data,
         "structure": structure_data,
         "signals": signals,
-        "oi": oi_summary
+        "oi": oi_summary,
+        "tradeSetup": trade_setup,
+        "trade_setup": trade_setup,
+        "summarySignal": trade_setup,
     }
 
 
@@ -936,15 +956,16 @@ async def scan_market(
 
     screener_results = []
     for res in results:
-        if isinstance(res, dict) and res.get("signals"):
+        if isinstance(res, dict) and (res.get("signals") or res.get("tradeSetup")):
             oi_info = res.get("oi", {})
             d5 = oi_info.get("deltas", {}).get("5m", {})
             screener_results.append({
                 "coin": res["coin"],
                 "currentPrice": res["currentPrice"],
                 "trend": res["structure"]["trend"],
-                "signals": res["signals"],
-                "signalsCount": len(res["signals"]),
+                "signals": res.get("signals", []),
+                "signalsCount": len(res.get("signals", [])),
+                "tradeSetup": res.get("tradeSetup"),
                 "resistancesCount": len(res["levels"]["resistances"]),
                 "supportsCount": len(res["levels"]["supports"]),
                 "openInterest": oi_info.get("current_oi", 0.0),

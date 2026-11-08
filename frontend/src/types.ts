@@ -173,6 +173,47 @@ export interface StructuralContext {
   structural_tier?: 'TIER_1_CONFLUENT' | 'TIER_2_STANDARD' | 'TIER_3_WARNING';
 }
 
+export interface ConfluenceFactor {
+  category: 'structure' | 'level' | 'sweep' | 'fvg' | 'trendline' | 'oi' | string;
+  title: string;
+  desc: string;
+  weight: number;
+}
+
+export interface TradeSetup {
+  coin: string;
+  interval: string;
+  action: 'LOOK_FOR_LONG' | 'LOOK_FOR_SHORT' | 'WAIT' | string;
+  direction: 'LONG' | 'SHORT' | 'NEUTRAL';
+  recommendation_title: string;
+  status_label: string;
+  badge_color: 'green' | 'red' | 'gray' | string;
+  entry_price: number | null;
+  entry_range: [number, number] | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  targets?: number[];
+  risk_reward: number | null;
+  risk_reward_formatted: string | null;
+  risk_pct: number | null;
+  reward_pct: number | null;
+  confluence_score: number;
+  confluence_tier: 'HIGH' | 'MEDIUM' | 'SPECULATIVE' | 'NONE' | string;
+  confluence_factors: ConfluenceFactor[];
+  primary_trigger?: string;
+  summary_comment: string;
+  long_potential?: {
+    score: number;
+    rr: number | null;
+    rejection_reason?: string;
+  };
+  short_potential?: {
+    score: number;
+    rr: number | null;
+    rejection_reason?: string;
+  };
+}
+
 export interface SignalItem {
   id: string;
   coin: string;
@@ -472,6 +513,9 @@ export interface AnalysisData {
   };
   signals: SignalItem[];
   oi?: OIData;
+  tradeSetup?: TradeSetup;
+  trade_setup?: TradeSetup;
+  summarySignal?: TradeSetup;
 }
 
 export type LiquiditySweepItem = AnalysisData['liquidity']['sweeps'][number];
@@ -492,6 +536,7 @@ export interface ScreenerItem {
   trend: string;
   signals: SignalItem[];
   signalsCount: number;
+  tradeSetup?: TradeSetup;
   resistancesCount: number;
   supportsCount: number;
   openInterest?: number;
