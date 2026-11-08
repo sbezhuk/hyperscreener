@@ -280,14 +280,28 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           displayLabel += ` [${stateLabel}]`;
         }
 
-        // Measure Q width to place state badge adjacent to it
+        // Measure badge widths to layout badges adjacent to each other from right to left
         ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
         const qWidth = ctx.measureText(qText).width + 12;
 
-        // Draw Q badge at rightmost edge
-        drawBadge(ctx, qText, maxRightX - 8, extendY, qColor, 'right', theme);
-        // Draw Market Interaction State badge immediately to the left
-        drawBadge(ctx, displayLabel, maxRightX - 8 - qWidth - 4, extendY, stateColor, 'right', theme);
+        let rightOffset = maxRightX - 8;
+
+        // 1. Draw Q badge at rightmost edge
+        drawBadge(ctx, qText, rightOffset, extendY, qColor, 'right', theme);
+        rightOffset -= (qWidth + 4);
+
+        // 2. Draw Market Interaction State badge
+        const stateWidth = ctx.measureText(displayLabel).width + 12;
+        drawBadge(ctx, displayLabel, rightOffset, extendY, stateColor, 'right', theme);
+        rightOffset -= (stateWidth + 4);
+
+        // 3. Phase 4: Structural Risk Warning (e.g. AGAINST HTF)
+        const riskFlags = tl.structuralRiskFlags || tl.structural_risk_flags || [];
+        const isAgainstHtf = riskFlags.includes('AGAINST_HTF') || tl.htfContext === 'AGAINST_HTF' || tl.htf_context === 'AGAINST_HTF';
+        if (isAgainstHtf) {
+          const warningLabel = '⚠️ AGAINST HTF';
+          drawBadge(ctx, warningLabel, rightOffset, extendY, '#ef4444', 'right', theme);
+        }
       });
       return;
     }

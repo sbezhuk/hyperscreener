@@ -220,6 +220,10 @@ async def analyze_coin_data(
             "distanceToLineAtr": tl.get("distance_to_line_atr", 0.0),
             "compression_ratio": tl.get("compression_ratio", 1.0),
             "compressionRatio": tl.get("compression_ratio", 1.0),
+            "htf_context": tl.get("htf_context", "UNAVAILABLE"),
+            "htfContext": tl.get("htf_context", "UNAVAILABLE"),
+            "structural_risk_flags": tl.get("structural_risk_flags", []),
+            "structuralRiskFlags": tl.get("structural_risk_flags", []),
         })
 
     # 5. FVG (category: "fvg")

@@ -132,6 +132,22 @@ export interface SignalItem {
   oiDelta?: number | null;
   oiReason?: string;
   oiReasonDesc?: string;
+
+  // Trendline Structural Intelligence (Phase 1, 2, 4)
+  structural_quality?: number;
+  structuralQuality?: number;
+  interaction_state?: string;
+  interactionState?: string;
+  touch_count?: number;
+  touchCount?: number;
+  distance_to_line_atr?: number;
+  distanceToLineAtr?: number;
+  compression_ratio?: number;
+  compressionRatio?: number;
+  htf_context?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  htfContext?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  structural_risk_flags?: string[];
+  structuralRiskFlags?: string[];
 }
 
 export interface OIDeltaItem {
@@ -252,6 +268,12 @@ export interface TrendlineItem {
   compressionRatio?: number;
   arrival_velocity?: number;
   arrivalVelocity?: number;
+
+  // Phase 4: HTF Structural Context & Risk Flags
+  htf_context?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  htfContext?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  structural_risk_flags?: string[];
+  structuralRiskFlags?: string[];
 }
 
 export interface AnalysisData {

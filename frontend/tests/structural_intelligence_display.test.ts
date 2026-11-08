@@ -173,4 +173,56 @@ test('Frontend Structural Intelligence Rendering Verification', async (t) => {
     assert.ok(!labels.some((l) => l.includes('Q: 92')), '1h chart MUST NOT render 15m Q: 92');
     assert.ok(!labels.some((l) => l.includes('[BREAKOUT]')), '1h chart MUST NOT render 15m [BREAKOUT]');
   });
+
+  await t.test('3. Renders AGAINST HTF structural risk warning badge on chart canvas', () => {
+    const primitive = new ZonesPrimitive();
+    const { timeScale, candleSeries } = createMockScaleAndSeries();
+    drawCalls = [];
+
+    primitive.attached({
+      chart: { timeScale: () => timeScale },
+      series: candleSeries,
+      requestUpdate: () => {},
+    } as any);
+
+    const tlAgainstHtf: TrendlineItem = {
+      id: 'tl-15m-sup-against',
+      timeframe: '15m',
+      direction: 'ASCENDING',
+      line_type: 'support_trendline',
+      label: 'Наклонка (Підтримка)',
+      start_point: { time: 1700000100, price: 100 },
+      end_point: { time: 1700000300, price: 120 },
+      slope: 0.1,
+      touch_count: 3,
+      strength: 88,
+      structuralQuality: 88,
+      interactionState: 'TESTING',
+      htfContext: 'AGAINST_HTF',
+      structuralRiskFlags: ['AGAINST_HTF'],
+      status: 'ACTIVE',
+      last_updated: 1700000500,
+      type: 'support_trendline',
+      p1: { time: 1700000100, price: 100 },
+      p2: { time: 1700000300, price: 120 },
+    };
+
+    primitive.updateData({
+      trendlines: [tlAgainstHtf],
+      activeFormation: 'TRENDLINE',
+      currentTimeframe: '15m',
+    });
+
+    const renderer = primitive.paneViews()[0].renderer();
+    renderer.draw({
+      useMediaCoordinateSpace: (cb: any) => {
+        cb({ context: canvasContextMock, mediaSize: { width: 1000, height: 600 } });
+      },
+    });
+
+    const labels = drawCalls.filter((c) => c.type === 'fillText').map((c) => c.args[0]);
+    assert.ok(labels.some((l) => l.includes('Q: 88')), 'Must render Q: 88');
+    assert.ok(labels.some((l) => l.includes('[TESTING]')), 'Must render [TESTING]');
+    assert.ok(labels.some((l) => l.includes('⚠️ AGAINST HTF')), 'Must render ⚠️ AGAINST HTF warning badge');
+  });
 });

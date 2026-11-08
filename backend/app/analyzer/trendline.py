@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Tuple
 import math
 import time
+from .structure import analyze_market_structure
 
 TIMEFRAME_SWING_CONFIG = {
     "1m":  {"left": 4, "right": 3, "prominence": 0.40},
@@ -12,6 +13,43 @@ TIMEFRAME_SWING_CONFIG = {
     "4h":  {"left": 3, "right": 3, "prominence": 0.30},
     "1d":  {"left": 3, "right": 3, "prominence": 0.25},
 }
+
+TIMEFRAME_SECONDS_MAP = {
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "8h": 28800,
+    "12h": 43200,
+    "1d": 86400,
+}
+
+
+def _resolve_timeframe_step_seconds(
+    candles: Optional[List[Dict[str, Any]]] = None,
+    interval_str: Optional[str] = None,
+    default_step: int = 3600,
+) -> int:
+    """Resolves candle duration in seconds from interval name or candle timestamps."""
+    if interval_str:
+        clean = interval_str.lower()
+        if clean in TIMEFRAME_SECONDS_MAP:
+            return TIMEFRAME_SECONDS_MAP[clean]
+
+    if candles and len(candles) >= 2:
+        diffs = [
+            int(candles[i]["time"] - candles[i - 1]["time"])
+            for i in range(1, min(10, len(candles)))
+            if candles[i].get("time", 0) > candles[i - 1].get("time", 0)
+        ]
+        if diffs:
+            return min(diffs)
+
+    return default_step
 
 # Configurable threshold for ATR Compression
 DEFAULT_COMPRESSION_THRESHOLD = 0.65
@@ -417,6 +455,99 @@ def evaluate_market_interaction_state(
     }
 
 
+def evaluate_htf_structural_context(
+    line_type: str,
+    candle_time: int,
+    htf_candles: Optional[List[Dict[str, Any]]] = None,
+    evaluation_time: Optional[int] = None,
+    is_candle_closed: bool = False,
+    ltf_interval: Optional[str] = None,
+) -> str:
+    """
+    Evaluates Higher-Timeframe (HTF) market structure context for a lower-timeframe trendline.
+    Strictly enforces the Point-in-Time invariant:
+      htf_candle_close_time <= evaluation_time
+
+    - An HTF candle is ONLY included after it is fully closed.
+    - An unclosed / forming HTF candle is strictly excluded.
+    - If evaluation_time is not provided:
+        * If is_candle_closed is True: evaluation_time = candle_time + ltf_step
+        * If is_candle_closed is False: evaluation_time = candle_time
+
+    Returns:
+      'ALIGNED': Support line in BULLISH HTF, or Resistance line in BEARISH HTF.
+      'AGAINST_HTF': Support line in BEARISH HTF, or Resistance line in BULLISH HTF.
+      'NEUTRAL': HTF trend is NEUTRAL / CONSOLIDATING / EXPANDING.
+      'UNAVAILABLE': Missing or insufficient (< 20 closed bars) HTF candle history.
+    """
+    if not htf_candles or len(htf_candles) < 20:
+        return "UNAVAILABLE"
+
+    # 1. Determine effective evaluation time
+    if evaluation_time is not None:
+        effective_eval_time = int(evaluation_time)
+    elif is_candle_closed:
+        ltf_step = _resolve_timeframe_step_seconds(interval_str=ltf_interval, default_step=900)
+        effective_eval_time = int(candle_time + ltf_step)
+    else:
+        effective_eval_time = int(candle_time)
+
+    # 2. Determine HTF candle step duration
+    htf_step = _resolve_timeframe_step_seconds(candles=htf_candles, default_step=3600)
+
+    # 3. Strict Point-in-Time filter: htf_candle_close_time <= effective_eval_time
+    pit_htf = [
+        c for c in htf_candles
+        if int(c.get("close_time") or (c.get("time", 0) + htf_step)) <= effective_eval_time
+    ]
+    if len(pit_htf) < 20:
+        return "UNAVAILABLE"
+
+    htf_struct = analyze_market_structure(pit_htf)
+    htf_trend = htf_struct.get("trend", "NEUTRAL")
+
+    is_res = (line_type == "resistance_trendline")
+
+    if htf_trend == "BULLISH":
+        return "AGAINST_HTF" if is_res else "ALIGNED"
+    elif htf_trend == "BEARISH":
+        return "ALIGNED" if is_res else "AGAINST_HTF"
+    else:
+        return "NEUTRAL"
+
+
+def compute_structural_risk_flags(
+    htf_context: str,
+    interaction_state: str,
+    compression_ratio: float,
+    compression_threshold: float = DEFAULT_COMPRESSION_THRESHOLD,
+    status: str = "ACTIVE",
+) -> List[str]:
+    """
+    Assembles active structural risk flags for the trendline.
+    Multiple flags can coexist without overriding each other.
+    Allowed flags: 'AGAINST_HTF', 'COMPRESSION', 'BREAKOUT', 'RETEST', 'STALE'.
+    """
+    flags: List[str] = []
+
+    if htf_context == "AGAINST_HTF":
+        flags.append("AGAINST_HTF")
+
+    if interaction_state == "COMPRESSION" or compression_ratio < compression_threshold:
+        flags.append("COMPRESSION")
+
+    if interaction_state == "BREAKOUT" or status == "BROKEN":
+        flags.append("BREAKOUT")
+
+    if interaction_state == "RETEST":
+        flags.append("RETEST")
+
+    if interaction_state == "STALE" or status == "STALE":
+        flags.append("STALE")
+
+    return flags
+
+
 def _evaluate_trendline_candidate(
     candles: List[Dict[str, Any]],
     p1: Dict[str, Any],
@@ -425,6 +556,7 @@ def _evaluate_trendline_candidate(
     interval: str,
     atr: float,
     compression_threshold: float = DEFAULT_COMPRESSION_THRESHOLD,
+    htf_candles: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Evaluates a candidate line connecting two swing points (p1, p2).
@@ -568,6 +700,26 @@ def _evaluate_trendline_candidate(
         velocity = 0.0
 
     last_updated = int(curr_c.get("time", 0))
+    is_closed = bool(curr_c.get("is_closed", True))
+    explicit_eval_time = curr_c.get("evaluation_time")
+
+    # Phase 4.6: Strict Point-in-Time HTF Structural Context & Structural Risk Flags
+    htf_context = evaluate_htf_structural_context(
+        line_type=tl_type,
+        candle_time=last_updated,
+        htf_candles=htf_candles,
+        evaluation_time=explicit_eval_time,
+        is_candle_closed=is_closed,
+        ltf_interval=interval,
+    )
+    structural_risk_flags = compute_structural_risk_flags(
+        htf_context=htf_context,
+        interaction_state=interaction_state,
+        compression_ratio=compression_ratio,
+        compression_threshold=compression_threshold,
+        status=status,
+    )
+
     label_side = "Опір" if is_res else "Підтримка"
     label = f"Наклонка ({label_side})"
     timeframe_label = f"Наклонка ({label_side}) [{interval}]"
@@ -621,6 +773,12 @@ def _evaluate_trendline_candidate(
         "compressionRatio": compression_ratio,
         "arrivalVelocity": velocity,
 
+        # Phase 4: HTF Structural Context & Structural Risk Flags:
+        "htf_context": htf_context,
+        "htfContext": htf_context,
+        "structural_risk_flags": structural_risk_flags,
+        "structuralRiskFlags": structural_risk_flags,
+
         # Backward compatibility fields for chart and screener
         "id": f"tl-{interval}-{ 'res' if is_res else 'sup' }-{p1['time']}-{p2['time']}",
         "type": tl_type,
@@ -638,6 +796,7 @@ def detect_timeframe_trendlines(
     interval: str = "5m",
     include_broken: bool = False,
     max_lines_per_type: int = 1,
+    htf_candles: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Independently detects and builds trendlines strictly from the candle history of the specified timeframe.
@@ -668,6 +827,7 @@ def detect_timeframe_trendlines(
                 tl_type="resistance_trendline",
                 interval=interval,
                 atr=atr,
+                htf_candles=htf_candles,
             )
             if candidate:
                 if not include_broken and candidate["status"] == "BROKEN":
@@ -685,6 +845,7 @@ def detect_timeframe_trendlines(
                 tl_type="support_trendline",
                 interval=interval,
                 atr=atr,
+                htf_candles=htf_candles,
             )
             if candidate:
                 if not include_broken and candidate["status"] == "BROKEN":
