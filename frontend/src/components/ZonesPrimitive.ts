@@ -637,24 +637,49 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const yBottom = candleSeries.priceToCoordinate(r.bottom);
         if (yTop === null || yBottom === null) return;
 
-        let xStart = r.firstTime ? (timeScale.timeToCoordinate(r.firstTime as any) as number | null) : 0;
-        if (xStart === null || xStart < 0) xStart = 0;
-
-        const boxWidth = Math.max(maxRightX - xStart, 20);
+        // Zones are extended across the entire chart width
+        const xStart = 0;
+        const boxWidth = maxRightX;
         const boxHeight = Math.max(Math.abs(yBottom - yTop), 3);
         const minY = Math.min(yTop, yBottom);
 
         const isWeakening = r.status === 'weakening';
+        const isPP = r.pivot_label === 'PP';
+        const isBreaker = r.smc_type === 'BREAKER_BLOCK';
+        const isLiqPool = r.smc_type === 'LIQUIDITY_POOL';
         const opacity = fillOpacity(r.strength_score);
 
-        // Fill - Red
-        ctx.fillStyle = `rgba(246, 70, 93, ${opacity})`;
+        // Fill color: Red for Supply/Resistance, Purple for PP, Amber for Breaker
+        let fillColor = `rgba(246, 70, 93, ${opacity})`;
+        let strokeColor = `rgba(246, 70, 93, ${r.touches >= 3 ? 0.75 : 0.45})`;
+        let badgeColor = 'rgba(246, 70, 93, 0.95)';
+
+        if (isPP) {
+          fillColor = `rgba(168, 85, 247, ${opacity})`;
+          strokeColor = `rgba(168, 85, 247, ${r.touches >= 3 ? 0.75 : 0.45})`;
+          badgeColor = 'rgba(168, 85, 247, 0.95)';
+        } else if (isBreaker) {
+          fillColor = `rgba(245, 158, 11, ${opacity})`;
+          strokeColor = `rgba(245, 158, 11, 0.65)`;
+          badgeColor = 'rgba(245, 158, 11, 0.95)';
+        } else if (isLiqPool) {
+          fillColor = `rgba(239, 68, 68, ${opacity * 0.9})`;
+          strokeColor = `rgba(239, 68, 68, 0.75)`;
+          badgeColor = 'rgba(239, 68, 68, 0.95)';
+        }
+
+        ctx.fillStyle = fillColor;
         ctx.fillRect(xStart, minY, boxWidth, boxHeight);
 
-        // Border - Red
-        const borderAlpha = r.touches >= 3 ? 0.75 : 0.45;
-        ctx.strokeStyle = `rgba(246, 70, 93, ${borderAlpha})`;
-        ctx.setLineDash([]);
+        // Border: dashed for Liquidity Pool or PP, solid for Order Blocks
+        ctx.strokeStyle = strokeColor;
+        if (isLiqPool) {
+          ctx.setLineDash([6, 3]);
+        } else if (isPP) {
+          ctx.setLineDash([4, 2]);
+        } else {
+          ctx.setLineDash([]);
+        }
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(xStart, minY);
@@ -662,16 +687,26 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.moveTo(xStart, minY + boxHeight);
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Badge text: clean ОПІР with timeframe, touches and score anchored cleanly at the right edge
+        // Badge text: Clean SMC indicator without verbose redundant tags
         const sc = r.strength_score !== undefined ? Math.round(r.strength_score) : undefined;
-        const retestPart = r.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
         const tfBadge = r.timeframe ? ` [${r.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
-        const badgeText = `ОПІР${tfBadge} x${r.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
-        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(246, 70, 93, 0.95)', 'right', theme);
+
+        let tag = 'ОПІР';
+        if (r.smc_label === 'OB Supply') tag = '[OB SUPPLY]';
+        else if (r.smc_label === 'OB Demand') tag = '[OB DEMAND]';
+        else if (r.smc_label === 'BSL') tag = '[BSL ЛІКВІДНІСТЬ]';
+        else if (r.smc_label === 'SSL') tag = '[SSL ЛІКВІДНІСТЬ]';
+        else if (r.smc_label === 'Breaker') tag = '[BREAKER]';
+        else if (r.pivot_label === 'PP') tag = '[PP] ПІВОТ';
+        else if (r.pivot_label) tag = `[${r.pivot_label}]`;
+
+        const badgeText = `${tag}${tfBadge}${r.touches > 1 ? ` x${r.touches}` : ''}${sc !== undefined ? ` S:${sc}` : ''}`;
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, badgeColor, 'right', theme);
       });
 
-      // Draw Supports (ALWAYS GREEN)
+      // Draw Supports (ALWAYS GREEN, Purple for PP, Cyan/Amber for Breaker)
       supports.forEach((s) => {
         if (!s.price || s.touches < 1) return;
 
@@ -679,24 +714,47 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const yBottom = candleSeries.priceToCoordinate(s.bottom);
         if (yTop === null || yBottom === null) return;
 
-        let xStart = s.firstTime ? (timeScale.timeToCoordinate(s.firstTime as any) as number | null) : 0;
-        if (xStart === null || xStart < 0) xStart = 0;
-
-        const boxWidth = Math.max(maxRightX - xStart, 20);
+        // Zones are extended across the entire chart width
+        const xStart = 0;
+        const boxWidth = maxRightX;
         const boxHeight = Math.max(Math.abs(yBottom - yTop), 3);
         const minY = Math.min(yTop, yBottom);
 
         const isWeakening = s.status === 'weakening';
+        const isPP = s.pivot_label === 'PP';
+        const isBreaker = s.smc_type === 'BREAKER_BLOCK';
+        const isLiqPool = s.smc_type === 'LIQUIDITY_POOL';
         const opacity = fillOpacity(s.strength_score);
 
-        // Fill - Green
-        ctx.fillStyle = `rgba(14, 203, 129, ${opacity})`;
+        let fillColor = `rgba(14, 203, 129, ${opacity})`;
+        let strokeColor = `rgba(14, 203, 129, ${s.touches >= 3 ? 0.75 : 0.45})`;
+        let badgeColor = 'rgba(14, 203, 129, 0.95)';
+
+        if (isPP) {
+          fillColor = `rgba(168, 85, 247, ${opacity})`;
+          strokeColor = `rgba(168, 85, 247, ${s.touches >= 3 ? 0.75 : 0.45})`;
+          badgeColor = 'rgba(168, 85, 247, 0.95)';
+        } else if (isBreaker) {
+          fillColor = `rgba(59, 130, 246, ${opacity})`;
+          strokeColor = `rgba(59, 130, 246, 0.65)`;
+          badgeColor = 'rgba(59, 130, 246, 0.95)';
+        } else if (isLiqPool) {
+          fillColor = `rgba(16, 185, 129, ${opacity * 0.9})`;
+          strokeColor = `rgba(16, 185, 129, 0.75)`;
+          badgeColor = 'rgba(16, 185, 129, 0.95)';
+        }
+
+        ctx.fillStyle = fillColor;
         ctx.fillRect(xStart, minY, boxWidth, boxHeight);
 
-        // Border - Green
-        const borderAlpha = s.touches >= 3 ? 0.75 : 0.45;
-        ctx.strokeStyle = `rgba(14, 203, 129, ${borderAlpha})`;
-        ctx.setLineDash([]);
+        ctx.strokeStyle = strokeColor;
+        if (isLiqPool) {
+          ctx.setLineDash([6, 3]);
+        } else if (isPP) {
+          ctx.setLineDash([4, 2]);
+        } else {
+          ctx.setLineDash([]);
+        }
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(xStart, minY);
@@ -704,13 +762,22 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         ctx.moveTo(xStart, minY + boxHeight);
         ctx.lineTo(maxRightX, minY + boxHeight);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Badge text: clean ПІДТРИМКА with timeframe, touches and score anchored cleanly at the right edge
         const sc = s.strength_score !== undefined ? Math.round(s.strength_score) : undefined;
-        const retestPart = s.status === 'retested' ? ' [ДЗЕРКАЛЬНИЙ]' : '';
         const tfBadge = s.timeframe ? ` [${s.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
-        const badgeText = `ПІДТРИМКА${tfBadge} x${s.touches}${sc !== undefined ? ` S:${sc}` : ''}${retestPart}`;
-        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, 'rgba(14, 203, 129, 0.95)', 'right', theme);
+
+        let tag = 'ПІДТРИМКА';
+        if (s.smc_label === 'OB Demand') tag = '[OB DEMAND]';
+        else if (s.smc_label === 'OB Supply') tag = '[OB SUPPLY]';
+        else if (s.smc_label === 'SSL') tag = '[SSL ЛІКВІДНІСТЬ]';
+        else if (s.smc_label === 'BSL') tag = '[BSL ЛІКВІДНІСТЬ]';
+        else if (s.smc_label === 'Breaker') tag = '[BREAKER]';
+        else if (s.pivot_label === 'PP') tag = '[PP] ПІВОТ';
+        else if (s.pivot_label) tag = `[${s.pivot_label}]`;
+
+        const badgeText = `${tag}${tfBadge}${s.touches > 1 ? ` x${s.touches}` : ''}${sc !== undefined ? ` S:${sc}` : ''}`;
+        drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, badgeColor, 'right', theme);
       });
     }
   }

@@ -62,6 +62,7 @@ class MTFLevelsManager:
                 mtf_results[tf] = {
                     "resistances": active_levels.get("resistances", []),
                     "supports": active_levels.get("supports", []),
+                    "pivot_points": active_levels.get("pivot_points", {}),
                 }
             else:
                 cached = self.get_cached_levels(coin, tf)
@@ -69,6 +70,7 @@ class MTFLevelsManager:
                     mtf_results[tf] = {
                         "resistances": cached.get("resistances", []),
                         "supports": cached.get("supports", []),
+                        "pivot_points": cached.get("pivot_points", {}),
                     }
                 else:
                     needed_tfs.append(tf)
@@ -85,10 +87,11 @@ class MTFLevelsManager:
                         return tf, {
                             "resistances": lvl.get("resistances", []),
                             "supports": lvl.get("supports", []),
+                            "pivot_points": lvl.get("pivot_points", {}),
                         }
                 except Exception:
                     pass
-                return tf, {"resistances": [], "supports": []}
+                return tf, {"resistances": [], "supports": [], "pivot_points": {}}
 
             results = await asyncio.gather(*[fetch_and_analyze(tf) for tf in needed_tfs])
             for tf, res in results:

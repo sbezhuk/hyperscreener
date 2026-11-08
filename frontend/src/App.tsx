@@ -926,6 +926,7 @@ export function App() {
               oiData={analysis?.oi}
               onlyConfirmedOi={onlyConfirmedOi}
               onClose={() => setIsSidebarOpen(false)}
+              pivotPoints={analysis?.levels?.pivot_points}
             />
           </div>
         )}
@@ -955,6 +956,7 @@ export function App() {
                 oiData={analysis?.oi}
                 onlyConfirmedOi={onlyConfirmedOi}
                 onClose={() => setIsSidebarOpen(false)}
+                pivotPoints={analysis?.levels?.pivot_points}
               />
             </div>
           </div>

@@ -349,14 +349,16 @@ async def analyze_coin_data(
             active_interval=interval,
             active_candles=candles
         )
-        active_data = mtf_levels.get(clean_tf, {"resistances": [], "supports": []})
+        active_data = mtf_levels.get(clean_tf, {"resistances": [], "supports": [], "pivot_points": {}})
         active_res = active_data.get("resistances", [])
         active_sup = active_data.get("supports", [])
+        active_pivots = active_data.get("pivot_points", {})
     else:
         active_levels = analyze_levels(candles, interval=clean_tf)
         active_res = active_levels.get("resistances", [])
         active_sup = active_levels.get("supports", [])
-        mtf_levels = {clean_tf: {"resistances": active_res, "supports": active_sup}}
+        active_pivots = active_levels.get("pivot_points", {})
+        mtf_levels = {clean_tf: {"resistances": active_res, "supports": active_sup, "pivot_points": active_pivots}}
 
     cascades = []
     if len(active_res) >= 2:
@@ -365,7 +367,7 @@ async def analyze_coin_data(
         c2 = r2.get("center_price", r2.get("price", 0))
         if c1 > 0:
             diff = (c2 - c1) / c1 * 100
-            if diff < 2.5 and r1.get("touches", 0) >= 2:
+            if diff < 2.5 and r1.get("touches", 0) >= 1:
                 cascades.append({
                     "type": "resistance_cascade",
                     "levels": [r1["price"], r2["price"]],
@@ -378,6 +380,7 @@ async def analyze_coin_data(
         "resistances": active_res,
         "supports": active_sup,
         "cascades": cascades,
+        "pivot_points": active_pivots,
     }
 
     structure_data = analyze_market_structure(candles)

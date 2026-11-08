@@ -57,6 +57,31 @@ export interface LevelItem {
   last_tested_at?: number;
   status?: 'active' | 'weakening' | 'broken' | 'retested';
   is_htf?: boolean;
+  is_pivot?: boolean;
+  pivot_label?: 'PP' | 'R1' | 'R2' | 'R3' | 'S1' | 'S2' | 'S3' | string;
+  // SMC Smart Money Fields:
+  smc_type?: 'ORDER_BLOCK' | 'BREAKER_BLOCK' | 'LIQUIDITY_POOL' | 'STRUCTURE_ORIGIN' | string;
+  smc_label?: string;
+  is_mitigated?: boolean;
+  has_fvg?: boolean;
+  caused_bos?: boolean;
+}
+
+export interface PivotPointsData {
+  period: string;
+  period_key?: string;
+  first_time?: number;
+  last_time?: number;
+  high: number;
+  low: number;
+  close: number;
+  pp: number;
+  r1: number;
+  r2: number;
+  r3: number;
+  s1: number;
+  s2: number;
+  s3: number;
 }
 
 export interface FVGItem {
@@ -383,8 +408,9 @@ export interface AnalysisData {
       desc: string;
       distPct: number;
     }>;
+    pivot_points?: PivotPointsData;
   };
-  multiTimeframeLevels?: Record<string, { resistances: LevelItem[]; supports: LevelItem[] }>;
+  multiTimeframeLevels?: Record<string, { resistances: LevelItem[]; supports: LevelItem[]; pivot_points?: PivotPointsData }>;
   fvgs: FVGItem[];
   multiTimeframeFvgs?: Record<string, FVGItem[]>;
   fvgConfluences?: FVGConfluenceItem[];
