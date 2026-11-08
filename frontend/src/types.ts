@@ -192,12 +192,14 @@ export interface SignalItem {
   structural_context?: StructuralContext;
 
   // Trendline Improved Signals (Breakout & Retest, Bounce, OI)
-  signal_type?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | string;
-  signalType?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | string;
+  signal_type?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | 'CHANNEL_BREAKOUT' | 'CHANNEL_FALSE_BREAKOUT' | 'CHANNEL_TEST' | string;
+  signalType?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | 'CHANNEL_BREAKOUT' | 'CHANNEL_FALSE_BREAKOUT' | 'CHANNEL_TEST' | string;
   is_retest?: boolean;
   isRetest?: boolean;
   is_confirmed?: boolean;
   isConfirmed?: boolean;
+  target_price?: number;
+  targetPrice?: number;
 }
 
 export interface OIDeltaItem {

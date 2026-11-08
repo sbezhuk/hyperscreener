@@ -632,6 +632,194 @@ async def analyze_coin_data(
             "structuralRiskFlags": tl.get("structural_risk_flags", []),
         })
 
+    # 3.1 Linear Regression Trend Channel Signals
+    if regression_channel and regression_channel.get("r_squared", 0.0) >= 0.35 and len(candles) >= 15:
+        curr_c = candles[-1]
+        prev_c = candles[-2] if len(candles) >= 2 else curr_c
+        N_chan = regression_channel.get("sample_size", 60)
+        k_slope = regression_channel["slope"]
+        b_intercept = regression_channel["intercept"]
+        sigma = regression_channel["std_dev"]
+        num_std = regression_channel.get("num_std", 2.0)
+
+        curr_mid = k_slope * (N_chan - 1) + b_intercept
+        curr_up = curr_mid + num_std * sigma
+        curr_low = curr_mid - num_std * sigma
+
+        prev_mid = k_slope * (N_chan - 2) + b_intercept
+        prev_up = prev_mid + num_std * sigma
+        prev_low = prev_mid - num_std * sigma
+
+        pos_pct = regression_channel.get("channel_position_pct", 50.0)
+        r2_val = regression_channel.get("r_squared", 0.0)
+
+        chan_sig = None
+
+        # Scenario 1: False Breakout of Channel (Wick outside boundary + close inside)
+        if (curr_c["high"] > curr_up and curr_c["close"] <= curr_up) or (prev_c["high"] > prev_up and curr_c["close"] < curr_up and curr_c["close"] <= prev_c["close"]):
+            chan_sig = {
+                "id": f"regchan-fbreak-up-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_FALSE_BREAKOUT",
+                "signalType": "CHANNEL_FALSE_BREAKOUT",
+                "direction": "SHORT",
+                "title": f"Хибний пробій стелі тунелю (+2σ) [R²: {r2_val}]",
+                "desc": f"Свічка виходила за верхню межу тунелю ({curr_up:.4f}), але закрилася всередині. Сигнал повернення до медіани ({curr_mid:.4f}).",
+                "price": round(curr_up, 4),
+                "target_price": round(curr_mid, 4),
+                "time": curr_c["time"],
+                "status": "ACTIVE",
+                "statusLabel": "ХИБНИЙ ПРОБІЙ СТЕЛІ",
+                "status_label": "ХИБНИЙ ПРОБІЙ СТЕЛІ",
+                "badgeColor": "red",
+                "badge_color": "red",
+                "oiConfirmed": bool(oi_delta_pct and oi_delta_pct < 0),
+                "oi_confirmed": bool(oi_delta_pct and oi_delta_pct < 0),
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": "Зняття ліквідності над тунелем із поверненням всередину",
+                "strength": int(r2_val * 100),
+            }
+        elif (curr_c["low"] < curr_low and curr_c["close"] >= curr_low) or (prev_c["low"] < prev_low and curr_c["close"] > curr_low and curr_c["close"] >= prev_c["close"]):
+            chan_sig = {
+                "id": f"regchan-fbreak-low-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_FALSE_BREAKOUT",
+                "signalType": "CHANNEL_FALSE_BREAKOUT",
+                "direction": "LONG",
+                "title": f"Хибний пробій дна тунелю (-2σ) [R²: {r2_val}]",
+                "desc": f"Свічка виходила за нижню межу тунелю ({curr_low:.4f}), але закрилася всередині. Сигнал повернення до медіани ({curr_mid:.4f}).",
+                "price": round(curr_low, 4),
+                "target_price": round(curr_mid, 4),
+                "time": curr_c["time"],
+                "status": "ACTIVE",
+                "statusLabel": "ХИБНИЙ ПРОБІЙ ДНА",
+                "status_label": "ХИБНИЙ ПРОБІЙ ДНА",
+                "badgeColor": "green",
+                "badge_color": "green",
+                "oiConfirmed": bool(oi_delta_pct and oi_delta_pct < 0),
+                "oi_confirmed": bool(oi_delta_pct and oi_delta_pct < 0),
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": "Зняття ліквідності під тунелем із поверненням всередину",
+                "strength": int(r2_val * 100),
+            }
+
+        # Scenario 2: Channel Breakout (Close strictly outside tunnel)
+        elif curr_c["close"] > curr_up:
+            oi_conf = bool(oi_delta_pct and oi_delta_pct > oi_thresh)
+            chan_sig = {
+                "id": f"regchan-break-up-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_BREAKOUT",
+                "signalType": "CHANNEL_BREAKOUT",
+                "direction": "LONG",
+                "title": f"Пробій тунелю тренду вгору (+2σ) [R²: {r2_val}]",
+                "desc": f"Ціна закрилася вище верхньої межі тунелю ({curr_up:.4f}). Імпульсний вихід з тренду.",
+                "price": round(curr_up, 4),
+                "time": curr_c["time"],
+                "status": "BROKEN",
+                "statusLabel": "ІСТИННИЙ ПРОБІЙ ТУНЕЛЮ (+OI)" if oi_conf else "ПРОБІЙ ТУНЕЛЮ ВГОРУ",
+                "status_label": "ІСТИННИЙ ПРОБІЙ ТУНЕЛЮ (+OI)" if oi_conf else "ПРОБІЙ ТУНЕЛЮ ВГОРУ",
+                "badgeColor": "green" if oi_conf else "blue",
+                "badge_color": "green" if oi_conf else "blue",
+                "oiConfirmed": oi_conf,
+                "oi_confirmed": oi_conf,
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": f"Вихід з тунелю з динамікою OI: {oi_delta_pct:+.2f}%" if oi_delta_pct else "Вихід за межі 2σ",
+                "strength": int(r2_val * 100),
+            }
+        elif curr_c["close"] < curr_low:
+            oi_conf = bool(oi_delta_pct and oi_delta_pct > oi_thresh)
+            chan_sig = {
+                "id": f"regchan-break-low-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_BREAKOUT",
+                "signalType": "CHANNEL_BREAKOUT",
+                "direction": "SHORT",
+                "title": f"Пробій тунелю тренду вниз (-2σ) [R²: {r2_val}]",
+                "desc": f"Ціна закрилася нижче нижньої межі тунелю ({curr_low:.4f}). Прискорення падіння.",
+                "price": round(curr_low, 4),
+                "time": curr_c["time"],
+                "status": "BROKEN",
+                "statusLabel": "ІСТИННИЙ ПРОБІЙ ТУНЕЛЮ (+OI)" if oi_conf else "ПРОБІЙ ТУНЕЛЮ ВНИЗ",
+                "status_label": "ІСТИННИЙ ПРОБІЙ ТУНЕЛЮ (+OI)" if oi_conf else "ПРОБІЙ ТУНЕЛЮ ВНИЗ",
+                "badgeColor": "red" if oi_conf else "blue",
+                "badge_color": "red" if oi_conf else "blue",
+                "oiConfirmed": oi_conf,
+                "oi_confirmed": oi_conf,
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": f"Пробій нижньої межі з динамікою OI: {oi_delta_pct:+.2f}%" if oi_delta_pct else "Вихід під межу -2σ",
+                "strength": int(r2_val * 100),
+            }
+
+        # Scenario 3: Boundary Test / Overbought / Oversold
+        elif pos_pct >= 85.0:
+            chan_sig = {
+                "id": f"regchan-test-up-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_TEST",
+                "signalType": "CHANNEL_TEST",
+                "direction": "SHORT",
+                "title": f"Тест стелі тунелю (Перекупленість) [R²: {r2_val}]",
+                "desc": f"Ціна на {pos_pct:.0f}% висоти тунелю біля верхньої межі ({curr_up:.4f}). Ціль: медіана ({curr_mid:.4f}).",
+                "price": round(curr_up, 4),
+                "target_price": round(curr_mid, 4),
+                "time": curr_c["time"],
+                "status": "ACTIVE",
+                "statusLabel": "СТЕЛЯ ТУНЕЛЮ (85%+)",
+                "status_label": "СТЕЛЯ ТУНЕЛЮ (85%+)",
+                "badgeColor": "amber",
+                "badge_color": "amber",
+                "oiConfirmed": False,
+                "oi_confirmed": False,
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": "Зона перекупленості тунелю, потенціал відкату до медіани",
+                "strength": int(r2_val * 90),
+            }
+        elif pos_pct <= 15.0:
+            chan_sig = {
+                "id": f"regchan-test-low-{curr_c['time']}",
+                "coin": coin,
+                "interval": interval,
+                "category": "trendline",
+                "signal_type": "CHANNEL_TEST",
+                "signalType": "CHANNEL_TEST",
+                "direction": "LONG",
+                "title": f"Тест дна тунелю (Перепроданість) [R²: {r2_val}]",
+                "desc": f"Ціна на {pos_pct:.0f}% висоти тунелю біля нижньої межі ({curr_low:.4f}). Ціль: медіана ({curr_mid:.4f}).",
+                "price": round(curr_low, 4),
+                "target_price": round(curr_mid, 4),
+                "time": curr_c["time"],
+                "status": "ACTIVE",
+                "statusLabel": "ДНО ТУНЕЛЮ (15%-)",
+                "status_label": "ДНО ТУНЕЛЮ (15%-)",
+                "badgeColor": "blue",
+                "badge_color": "blue",
+                "oiConfirmed": False,
+                "oi_confirmed": False,
+                "oiDeltaPct": oi_delta_pct,
+                "oi_delta_pct": oi_delta_pct,
+                "oiReason": "Зона перепроданості тунелю, потенціал відскоку до медіани",
+                "strength": int(r2_val * 90),
+            }
+
+        if chan_sig:
+            signals.insert(0, chan_sig)
+
     # 5. FVG (category: "fvg")
     for fvg in fvgs:
         dist_to_gap = abs(current_price - fvg["midpoint_price"]) / current_price * 100

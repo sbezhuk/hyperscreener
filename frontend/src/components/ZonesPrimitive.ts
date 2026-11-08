@@ -206,7 +206,16 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const ryLow2 = lower ? candleSeries.priceToCoordinate(lower.p2.price) : null;
 
         if (rx1 !== null && rx2 !== null && ryMid1 !== null && ryMid2 !== null) {
-          // Channel semi-transparent fill
+          const projDx = rx2 - rx1;
+          const slopePxMid = projDx > 0 ? (ryMid2 - ryMid1) / projDx : 0;
+          // Forward projection ray into the future to maxRightX
+          const extendX = Math.min(width, Math.max(rx2 + 80, maxRightX));
+          const extendDist = extendX - rx2;
+          const extendMidY = ryMid2 + slopePxMid * extendDist;
+          const extendUpY = ryUp1 !== null && ryUp2 !== null ? ryUp2 + slopePxMid * extendDist : null;
+          const extendLowY = ryLow1 !== null && ryLow2 !== null ? ryLow2 + slopePxMid * extendDist : null;
+
+          // 1. Channel historical area fill
           if (ryUp1 !== null && ryUp2 !== null && ryLow1 !== null && ryLow2 !== null) {
             ctx.fillStyle = theme === 'dark' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(99, 102, 241, 0.05)';
             ctx.beginPath();
@@ -217,8 +226,20 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
             ctx.closePath();
             ctx.fill();
 
+            // 2. Projected future channel corridor fill
+            if (extendDist > 10 && extendUpY !== null && extendLowY !== null) {
+              ctx.fillStyle = theme === 'dark' ? 'rgba(99, 102, 241, 0.03)' : 'rgba(99, 102, 241, 0.02)';
+              ctx.beginPath();
+              ctx.moveTo(rx2, ryUp2);
+              ctx.lineTo(extendX, extendUpY);
+              ctx.lineTo(extendX, extendLowY);
+              ctx.lineTo(rx2, ryLow2);
+              ctx.closePath();
+              ctx.fill();
+            }
+
             // Upper Channel Band (y = kx + b + 2*sigma)
-            ctx.strokeStyle = theme === 'dark' ? 'rgba(129, 140, 248, 0.7)' : 'rgba(99, 102, 241, 0.7)';
+            ctx.strokeStyle = theme === 'dark' ? 'rgba(129, 140, 248, 0.75)' : 'rgba(99, 102, 241, 0.75)';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 3]);
             ctx.beginPath();
@@ -226,11 +247,30 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
             ctx.lineTo(rx2, ryUp2);
             ctx.stroke();
 
+            // Upper Projection Ray
+            if (extendDist > 10 && extendUpY !== null) {
+              ctx.setLineDash([2, 4]);
+              ctx.beginPath();
+              ctx.moveTo(rx2, ryUp2);
+              ctx.lineTo(extendX, extendUpY);
+              ctx.stroke();
+            }
+
             // Lower Channel Band (y = kx + b - 2*sigma)
+            ctx.setLineDash([4, 3]);
             ctx.beginPath();
             ctx.moveTo(rx1, ryLow1);
             ctx.lineTo(rx2, ryLow2);
             ctx.stroke();
+
+            // Lower Projection Ray
+            if (extendDist > 10 && extendLowY !== null) {
+              ctx.setLineDash([2, 4]);
+              ctx.beginPath();
+              ctx.moveTo(rx2, ryLow2);
+              ctx.lineTo(extendX, extendLowY);
+              ctx.stroke();
+            }
             ctx.setLineDash([]);
           }
 
@@ -243,6 +283,16 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           ctx.lineTo(rx2, ryMid2);
           ctx.stroke();
 
+          // Center Projection Ray
+          if (extendDist > 10) {
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(rx2, ryMid2);
+            ctx.lineTo(extendX, extendMidY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
           // Anchor points on regression line
           ctx.fillStyle = '#818cf8';
           ctx.beginPath();
@@ -250,11 +300,13 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           ctx.arc(rx2, ryMid2, 3, 0, Math.PI * 2);
           ctx.fill();
 
-          // Informational badge for regression channel
+          // Informational badge for regression channel (placed cleanly in projected future space)
           const r2Val = (regChan.rSquared ?? regChan.r_squared ?? 0).toFixed(2);
           const slopeVal = regChan.slope > 0 ? `+${regChan.slope}` : `${regChan.slope}`;
           const regText = `Канал регресії (R²: ${r2Val}, k: ${slopeVal})`;
-          drawBadge(ctx, regText, rx2 - 8, ryMid2, '#818cf8', 'right', theme);
+          const badgeX = extendDist > 30 ? Math.min(width - 10, extendX - 8) : (rx2 - 8);
+          const badgeY = extendDist > 30 ? extendMidY : ryMid2;
+          drawBadge(ctx, regText, badgeX, badgeY, '#818cf8', 'right', theme);
         }
       }
 

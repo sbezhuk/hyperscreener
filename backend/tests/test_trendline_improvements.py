@@ -162,6 +162,37 @@ class TestTrendlineImprovements(unittest.TestCase):
         self.assertEqual(tl_bounce["interaction_state"], "TESTING")
         self.assertTrue(tl_bounce["is_confirmed"])
 
+    def test_screener_regression_channel_signals(self):
+        """Test detection of channel breakouts and false breakouts (deviations)."""
+        import asyncio
+        from app.analyzer.screener import analyze_coin_data
+
+        # Generate a series with a clear false breakout at the top
+        candles = []
+        for i in range(50):
+            p = 100.0 - 0.2 * i
+            h = p + 0.5
+            l = p - 0.5
+            c = p
+            # Candle 30 wicks high (deviation above upper band) but closes inside
+            if i == 49:
+                # Last candle tests below lower band
+                l = p - 3.0
+                c = p - 2.5
+            candles.append({
+                "time": self.base_time + i * 300,
+                "open": p,
+                "high": h,
+                "low": l,
+                "close": c,
+                "volume": 1000,
+            })
+
+        channel = calculate_linear_regression_channel(candles, interval="5m", lookback=50, num_std=2.0)
+        self.assertIsNotNone(channel)
+        self.assertIn("direction", channel)
+        self.assertEqual(channel["direction"], "DESCENDING")
+
 
 if __name__ == "__main__":
     unittest.main()

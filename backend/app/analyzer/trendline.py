@@ -1001,9 +1001,11 @@ def calculate_linear_regression_channel(
     interval: str = "5m",
     lookback: int = 60,
     num_std: float = 2.0,
+    adaptive_anchor: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
     Computes Linear Regression Trendline and Channel using Ordinary Least Squares (OLS).
+    Supports adaptive anchoring to the major swing wave origin when it improves fit (R^2).
     Formula:
       y = k * x + b
       k = Cov(x, y) / Var(x) = [ sum((x - mean(x)) * (y - mean(y))) ] / [ sum((x - mean(x))^2) ]
@@ -1015,44 +1017,76 @@ def calculate_linear_regression_channel(
     if n_candles < 10:
         return None
 
-    sample_size = min(n_candles, max(15, lookback))
-    sample = candles[-sample_size:]
-    N = len(sample)
+    def _fit_ols(sample_window: List[Dict[str, Any]]):
+        N_win = len(sample_window)
+        if N_win < 10:
+            return None
+        y_vals = [float(c["close"]) for c in sample_window]
+        x_m = (N_win - 1) / 2.0
+        y_m = sum(y_vals) / N_win
+        cov = 0.0
+        var = 0.0
+        ss_t = 0.0
+        for i in range(N_win):
+            dx = i - x_m
+            dy = y_vals[i] - y_m
+            cov += dx * dy
+            var += dx * dx
+            ss_t += dy * dy
+        if var == 0.0:
+            return None
+        k_val = cov / var
+        b_val = y_m - k_val * x_m
+        ss_r = 0.0
+        for i in range(N_win):
+            pred = k_val * i + b_val
+            diff = y_vals[i] - pred
+            ss_r += diff * diff
+        sig = math.sqrt(ss_r / N_win)
+        r2 = (1.0 - (ss_r / ss_t)) if ss_t > 1e-9 else 0.0
+        r2 = max(0.0, min(1.0, r2))
+        return {
+            "N": N_win,
+            "k": k_val,
+            "b": b_val,
+            "sigma": sig,
+            "r_squared": r2,
+            "sample": sample_window,
+            "y_values": y_vals,
+        }
 
-    y_values = [float(c["close"]) for c in sample]
-    x_mean = (N - 1) / 2.0
-    y_mean = sum(y_values) / N
+    # 1. Baseline fit with default lookback
+    default_sample_size = min(n_candles, max(15, lookback))
+    best_fit = _fit_ols(candles[-default_sample_size:])
 
-    cov_xy = 0.0
-    var_x = 0.0
-    ss_tot = 0.0
+    # 2. Adaptive anchoring: if a major swing origin provides a noticeably better fit, anchor to it
+    if adaptive_anchor and n_candles >= 35:
+        search_window = candles[-min(n_candles, 120):]
+        window_len = len(search_window)
+        if window_len >= 25:
+            max_h_idx = max(range(window_len - 15), key=lambda idx: search_window[idx]["high"])
+            min_l_idx = min(range(window_len - 15), key=lambda idx: search_window[idx]["low"])
+            for cand_idx in (max_h_idx, min_l_idx):
+                cand_sample = search_window[cand_idx:]
+                if 20 <= len(cand_sample) <= 120:
+                    cand_fit = _fit_ols(cand_sample)
+                    if cand_fit and cand_fit["r_squared"] > (best_fit["r_squared"] if best_fit else 0.0) + 0.08:
+                        best_fit = cand_fit
 
-    for i in range(N):
-        dx = i - x_mean
-        dy = y_values[i] - y_mean
-        cov_xy += dx * dy
-        var_x += dx * dx
-        ss_tot += dy * dy
-
-    if var_x == 0.0:
+    if not best_fit:
         return None
 
-    k = cov_xy / var_x
-    b = y_mean - k * x_mean
+    N = best_fit["N"]
+    sample = best_fit["sample"]
+    k = best_fit["k"]
+    b = best_fit["b"]
+    sigma = best_fit["sigma"]
+    r_squared = best_fit["r_squared"]
+    curr_price = best_fit["y_values"][-1]
 
-    ss_res = 0.0
-    for i in range(N):
-        pred_y = k * i + b
-        diff = y_values[i] - pred_y
-        ss_res += diff * diff
-
-    sigma = math.sqrt(ss_res / N)
     if sigma < 1e-6:
         atr_sample = calculate_atr(sample, 14)
         sigma = atr_sample if atr_sample > 0 else max(curr_price * 0.005, 0.01)
-
-    r_squared = (1.0 - (ss_res / ss_tot)) if ss_tot > 1e-9 else 0.0
-    r_squared = max(0.0, min(1.0, r_squared))
 
     p1_time = int(sample[0]["time"])
     p2_time = int(sample[-1]["time"])
@@ -1066,7 +1100,6 @@ def calculate_linear_regression_channel(
     start_lower = start_mid - num_std * sigma
     end_lower = end_mid - num_std * sigma
 
-    curr_price = y_values[-1]
     channel_width = end_upper - end_lower
     if channel_width > 1e-6:
         channel_pos_pct = round(((curr_price - end_lower) / channel_width) * 100.0, 1)

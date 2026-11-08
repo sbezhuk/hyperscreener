@@ -302,6 +302,12 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                             className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
                               (sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
                                 ? ((sig.is_retest || sig.isRetest) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30')
+                                : (sig.signal_type === 'CHANNEL_BREAKOUT' || sig.signalType === 'CHANNEL_BREAKOUT')
+                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                                : (sig.signal_type === 'CHANNEL_FALSE_BREAKOUT' || sig.signalType === 'CHANNEL_FALSE_BREAKOUT')
+                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                                : (sig.signal_type === 'CHANNEL_TEST' || sig.signalType === 'CHANNEL_TEST')
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                 : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
                                 ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
                                 : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
@@ -309,6 +315,12 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                           >
                             {(sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
                               ? ((sig.is_retest || sig.isRetest) ? 'РЕТЕСТ ПРОБОЮ' : 'ПРОБІЙ')
+                              : (sig.signal_type === 'CHANNEL_BREAKOUT' || sig.signalType === 'CHANNEL_BREAKOUT')
+                              ? 'ПРОБІЙ ТУНЕЛЮ'
+                              : (sig.signal_type === 'CHANNEL_FALSE_BREAKOUT' || sig.signalType === 'CHANNEL_FALSE_BREAKOUT')
+                              ? 'ХИБНИЙ ПРОБІЙ'
+                              : (sig.signal_type === 'CHANNEL_TEST' || sig.signalType === 'CHANNEL_TEST')
+                              ? 'ТЕСТ ТУНЕЛЮ'
                               : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
                               ? 'ВІДСКОК'
                               : 'АКТИВНА'}
@@ -517,6 +529,11 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                             {flag === 'AGAINST_HTF' ? '⚠️ ПРОТИ HTF' : flag === 'COMPRESSION' ? '⚡ СТИСНЕННЯ' : flag === 'BREAKOUT' ? 'ПРОБІЙ' : flag === 'RETEST' ? 'РЕТЕСТ' : 'ЗАСТАРІЛА'}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {(sig.target_price || sig.targetPrice) && (
+                      <div className="pt-0.5 border-t border-slate-200 dark:border-slate-800 text-[9px] text-indigo-600 dark:text-indigo-400">
+                        <b>Ціль (медіана):</b> {(sig.target_price || sig.targetPrice)?.toFixed(4)}
                       </div>
                     )}
                     {(sig.oiReason || sig.oi_reason) && (
