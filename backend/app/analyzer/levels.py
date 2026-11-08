@@ -910,8 +910,8 @@ def _detect_smc_order_blocks(
                         closed_back_above = any(ac["close"] > ob_top for ac in after_break)
 
                         if (
-                            bars_since_break <= 40
-                            and current_price <= ob_bottom
+                            bars_since_break <= 50
+                            and current_price <= ob_top + 0.5 * atr
                             and not closed_back_above
                         ):
                             str_info = compute_smc_zone_strength(
@@ -1079,8 +1079,8 @@ def _detect_smc_order_blocks(
                         closed_back_below = any(ac["close"] < ob_bottom for ac in after_break)
 
                         if (
-                            bars_since_break <= 40
-                            and current_price >= ob_top
+                            bars_since_break <= 50
+                            and current_price >= ob_bottom - 0.5 * atr
                             and not closed_back_below
                         ):
                             str_info = compute_smc_zone_strength(
@@ -1176,27 +1176,42 @@ def _detect_smc_liquidity_pools(
                 top = max_px + 0.15 * atr
                 bottom = avg_px - 0.25 * atr
 
+                after_pool = [c for c in candles if c["time"] > max_time]
                 is_swept = any(c["high"] > top for c in candles if c["time"] > max_time)
-                # If swept and price has drifted far away, pool liquidity is exhausted
-                if is_swept and abs(avg_px - current_price) > 3.0 * atr:
-                    continue
-                # If price has broken far above (> 1.5 ATR above top), pool is broken
-                if current_price > top + 1.5 * atr:
-                    continue
+                # Role Reversal Check: If price decisively broke out above BSL and did not close back below bottom
+                closed_above = [c for c in after_pool if c["close"] > top + 0.2 * atr]
+                closed_back_down = any(c["close"] < bottom for c in after_pool)
+                is_role_reversal = bool(closed_above and not closed_back_down and current_price >= bottom - 0.5 * atr)
 
-                zone_type = "resistance"
+                if is_role_reversal:
+                    # Broken resistance flips to Support (Role Reversal)
+                    zone_type = "support"
+                    smc_type = "BREAKER_BLOCK"
+                    smc_label = "Breaker"
+                    status = "retested"
+                else:
+                    # If swept and price has drifted far away, pool liquidity is exhausted
+                    if is_swept and abs(avg_px - current_price) > 3.0 * atr:
+                        continue
+                    # If price has broken far above (> 1.5 ATR above top), pool is broken
+                    if current_price > top + 1.5 * atr:
+                        continue
+                    zone_type = "resistance"
+                    smc_type = "LIQUIDITY_POOL"
+                    smc_label = "BSL"
+                    status = "retested" if is_swept else "active"
 
                 ratio = (avg_px - range_low) / range_span
                 zone_loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
 
                 str_info = compute_smc_zone_strength(
-                    zone_type="resistance",
-                    smc_type="LIQUIDITY_POOL",
+                    zone_type=zone_type,
+                    smc_type=smc_type,
                     touches=len(cluster),
                     swept_liquidity=is_swept,
                     zone_location=zone_loc,
                     interval=interval,
-                    is_mitigated=is_swept,
+                    is_mitigated=is_swept or is_role_reversal,
                 )
 
                 pools.append({
@@ -1208,15 +1223,15 @@ def _detect_smc_liquidity_pools(
                     "volume_confirmation": 0.75,
                     "strength_score": str_info["strength_score"],
                     "strength_category": str_info["strength_category"],
-                    "status": "retested" if is_swept else "active",
+                    "status": status,
                     "zone_id": f"smc-bsl-{str(uuid.uuid4())[:4]}",
                     "type": zone_type,
                     "timeframe": interval,
                     "first_detected_at": min_time,
                     "last_tested_at": max_time,
-                    "smc_type": "LIQUIDITY_POOL",
-                    "smc_label": "BSL",
-                    "is_mitigated": is_swept,
+                    "smc_type": smc_type,
+                    "smc_label": smc_label,
+                    "is_mitigated": is_swept or is_role_reversal,
                     "zone_location": zone_loc,
                 })
 
@@ -1243,27 +1258,42 @@ def _detect_smc_liquidity_pools(
                 top = avg_px + 0.25 * atr
                 bottom = min_px - 0.15 * atr
 
+                after_pool = [c for c in candles if c["time"] > max_time]
                 is_swept = any(c["low"] < bottom for c in candles if c["time"] > max_time)
-                # If swept and price drifted far away, pool is exhausted
-                if is_swept and abs(avg_px - current_price) > 3.0 * atr:
-                    continue
-                # If price has broken far below (> 1.5 ATR below bottom), pool is broken
-                if current_price < bottom - 1.5 * atr:
-                    continue
+                # Role Reversal Check: If price decisively broke down below SSL and did not close back above top
+                closed_below = [c for c in after_pool if c["close"] < bottom - 0.2 * atr]
+                closed_back_up = any(c["close"] > top for c in after_pool)
+                is_role_reversal = bool(closed_below and not closed_back_up and current_price <= top + 0.5 * atr)
 
-                zone_type = "support"
+                if is_role_reversal:
+                    # Broken support flips to Resistance (Role Reversal)
+                    zone_type = "resistance"
+                    smc_type = "BREAKER_BLOCK"
+                    smc_label = "Breaker"
+                    status = "retested"
+                else:
+                    # If swept and price drifted far away, pool is exhausted
+                    if is_swept and abs(avg_px - current_price) > 3.0 * atr:
+                        continue
+                    # If price has broken far below (> 1.5 ATR below bottom), pool is broken
+                    if current_price < bottom - 1.5 * atr:
+                        continue
+                    zone_type = "support"
+                    smc_type = "LIQUIDITY_POOL"
+                    smc_label = "SSL"
+                    status = "retested" if is_swept else "active"
 
                 ratio = (avg_px - range_low) / range_span
                 zone_loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
 
                 str_info = compute_smc_zone_strength(
-                    zone_type="support",
-                    smc_type="LIQUIDITY_POOL",
+                    zone_type=zone_type,
+                    smc_type=smc_type,
                     touches=len(cluster),
                     swept_liquidity=is_swept,
                     zone_location=zone_loc,
                     interval=interval,
-                    is_mitigated=is_swept,
+                    is_mitigated=is_swept or is_role_reversal,
                 )
 
                 pools.append({
@@ -1275,15 +1305,15 @@ def _detect_smc_liquidity_pools(
                     "volume_confirmation": 0.75,
                     "strength_score": str_info["strength_score"],
                     "strength_category": str_info["strength_category"],
-                    "status": "retested" if is_swept else "active",
+                    "status": status,
                     "zone_id": f"smc-ssl-{str(uuid.uuid4())[:4]}",
                     "type": zone_type,
                     "timeframe": interval,
                     "first_detected_at": min_time,
                     "last_tested_at": max_time,
-                    "smc_type": "LIQUIDITY_POOL",
-                    "smc_label": "SSL",
-                    "is_mitigated": is_swept,
+                    "smc_type": smc_type,
+                    "smc_label": smc_label,
+                    "is_mitigated": is_swept or is_role_reversal,
                     "zone_location": zone_loc,
                 })
 
@@ -1362,73 +1392,121 @@ def analyze_levels(
         candles, swings, atr, current_price, interval=interval, range_high=range_high, range_low=range_low
     )
 
-    # 3.3 Key Structural Swings (Swing Demand & Supply)
+    # 3.3 Key Structural Swings (Swing Demand & Supply with Role Reversal / Breaker)
     structural_swings: List[Dict[str, Any]] = []
     for h in swings.get("highs", []):
         px = h["price"]
-        if current_price <= px + 1.5 * atr and px >= current_price - 1.0 * atr:
-            half_w = max(0.20 * atr, px * 0.0008)
-            ratio = (px - range_low) / range_span
-            loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
-            str_info = compute_smc_zone_strength(
-                zone_type="resistance",
-                smc_type="STRUCTURE_ORIGIN",
-                touches=1,
-                zone_location=loc,
-                interval=interval,
-            )
-            structural_swings.append({
-                "center_price": round(px, decimals),
-                "upper_price": round(px + half_w, decimals),
-                "lower_price": round(px - half_w, decimals),
-                "touches_count": 1,
-                "average_bounce_atr": 1.2,
-                "volume_confirmation": 0.7,
-                "strength_score": str_info["strength_score"],
-                "strength_category": str_info["strength_category"],
-                "status": "retested" if current_price > px else "active",
-                "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
-                "type": "resistance",
-                "timeframe": interval,
-                "first_detected_at": h["time"],
-                "last_tested_at": h["time"],
-                "smc_type": "STRUCTURE_ORIGIN",
-                "smc_label": "Supply",
-                "zone_location": loc,
-            })
+        h_time = h.get("time", 0)
+        after_h = [c for c in candles if c["time"] > h_time]
+        half_w = max(0.20 * atr, px * 0.0008)
+        top_p = px + half_w
+        bot_p = px - half_w
+
+        closed_above = [c for c in after_h if c["close"] > top_p + 0.2 * atr]
+        closed_back_down = any(c["close"] < bot_p for c in after_h)
+        is_role_reversal = bool(closed_above and not closed_back_down and current_price >= bot_p - 0.5 * atr)
+
+        if is_role_reversal:
+            # Resistance broken upwards without returning -> flips to Support (Breaker)
+            zone_type = "support"
+            smc_type = "BREAKER_BLOCK"
+            smc_label = "Breaker"
+            status = "retested"
+        else:
+            if current_price > px + 1.5 * atr or px < current_price - 1.0 * atr:
+                continue
+            zone_type = "resistance"
+            smc_type = "STRUCTURE_ORIGIN"
+            smc_label = "Supply"
+            status = "retested" if current_price > px else "active"
+
+        ratio = (px - range_low) / range_span
+        loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
+        str_info = compute_smc_zone_strength(
+            zone_type=zone_type,
+            smc_type=smc_type,
+            touches=1,
+            zone_location=loc,
+            interval=interval,
+            is_mitigated=is_role_reversal,
+        )
+        structural_swings.append({
+            "center_price": round(px, decimals),
+            "upper_price": round(top_p, decimals),
+            "lower_price": round(bot_p, decimals),
+            "touches_count": 1,
+            "average_bounce_atr": 1.2,
+            "volume_confirmation": 0.7,
+            "strength_score": str_info["strength_score"],
+            "strength_category": str_info["strength_category"],
+            "status": status,
+            "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
+            "type": zone_type,
+            "timeframe": interval,
+            "first_detected_at": h_time,
+            "last_tested_at": h_time,
+            "smc_type": smc_type,
+            "smc_label": smc_label,
+            "zone_location": loc,
+            "is_mitigated": is_role_reversal,
+        })
 
     for l in swings.get("lows", []):
         px = l["price"]
-        if current_price >= px - 1.5 * atr and px <= current_price + 1.0 * atr:
-            half_w = max(0.20 * atr, px * 0.0008)
-            ratio = (px - range_low) / range_span
-            loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
-            str_info = compute_smc_zone_strength(
-                zone_type="support",
-                smc_type="STRUCTURE_ORIGIN",
-                touches=1,
-                zone_location=loc,
-                interval=interval,
-            )
-            structural_swings.append({
-                "center_price": round(px, decimals),
-                "upper_price": round(px + half_w, decimals),
-                "lower_price": round(px - half_w, decimals),
-                "touches_count": 1,
-                "average_bounce_atr": 1.2,
-                "volume_confirmation": 0.7,
-                "strength_score": str_info["strength_score"],
-                "strength_category": str_info["strength_category"],
-                "status": "retested" if current_price < px else "active",
-                "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
-                "type": "support",
-                "timeframe": interval,
-                "first_detected_at": l["time"],
-                "last_tested_at": l["time"],
-                "smc_type": "STRUCTURE_ORIGIN",
-                "smc_label": "Demand",
-                "zone_location": loc,
-            })
+        l_time = l.get("time", 0)
+        after_l = [c for c in candles if c["time"] > l_time]
+        half_w = max(0.20 * atr, px * 0.0008)
+        top_p = px + half_w
+        bot_p = px - half_w
+
+        closed_below = [c for c in after_l if c["close"] < bot_p - 0.2 * atr]
+        closed_back_up = any(c["close"] > top_p for c in after_l)
+        is_role_reversal = bool(closed_below and not closed_back_up and current_price <= top_p + 0.5 * atr)
+
+        if is_role_reversal:
+            # Support broken downwards without returning -> flips to Resistance (Breaker)
+            zone_type = "resistance"
+            smc_type = "BREAKER_BLOCK"
+            smc_label = "Breaker"
+            status = "retested"
+        else:
+            if current_price < px - 1.5 * atr or px > current_price + 1.0 * atr:
+                continue
+            zone_type = "support"
+            smc_type = "STRUCTURE_ORIGIN"
+            smc_label = "Demand"
+            status = "retested" if current_price < px else "active"
+
+        ratio = (px - range_low) / range_span
+        loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
+        str_info = compute_smc_zone_strength(
+            zone_type=zone_type,
+            smc_type=smc_type,
+            touches=1,
+            zone_location=loc,
+            interval=interval,
+            is_mitigated=is_role_reversal,
+        )
+        structural_swings.append({
+            "center_price": round(px, decimals),
+            "upper_price": round(top_p, decimals),
+            "lower_price": round(bot_p, decimals),
+            "touches_count": 1,
+            "average_bounce_atr": 1.2,
+            "volume_confirmation": 0.7,
+            "strength_score": str_info["strength_score"],
+            "strength_category": str_info["strength_category"],
+            "status": status,
+            "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
+            "type": zone_type,
+            "timeframe": interval,
+            "first_detected_at": l_time,
+            "last_tested_at": l_time,
+            "smc_type": smc_type,
+            "smc_label": smc_label,
+            "zone_location": loc,
+            "is_mitigated": is_role_reversal,
+        })
 
     # Optional classic pivot points candidate generation if explicitly requested
     pivot_candidates: List[Dict[str, Any]] = []
@@ -1514,18 +1592,18 @@ def analyze_levels(
             smc_t = z.get("smc_type", "")
             is_mit = z.get("is_mitigated", False)
             type_bonus = 0.0
-            if smc_t == "ORDER_BLOCK":
+            if smc_t == "BREAKER_BLOCK":
+                type_bonus = 28.0
+            elif smc_t == "ORDER_BLOCK":
                 type_bonus = 28.0 if not is_mit else 16.0
             elif smc_t == "LIQUIDITY_POOL":
                 type_bonus = 22.0 if not is_mit else 12.0
-            elif smc_t == "BREAKER_BLOCK":
-                type_bonus = 14.0
             else:
-                type_bonus = 6.0
+                type_bonus = 8.0
 
             dist_atr = abs(z["center_price"] - current_price) / max(atr, 1e-6)
-            # Gentle proximity penalty so distant noise is deprioritized
-            dist_penalty = min(dist_atr * 1.2, 20.0)
+            # Proximity penalty so closer levels are prioritized over distant ones
+            dist_penalty = min(dist_atr * 2.0, 20.0)
 
             z["_composite_score"] = z.get("strength_score", 70.0) + type_bonus - dist_penalty
 
@@ -1577,10 +1655,17 @@ def analyze_levels(
                 sc = confluent["strength_score"]
                 confluent["strength_category"] = "Very Strong" if sc >= 85 else "Strong" if sc >= 70 else "Moderate"
                 # Upgrade label if confluent candidate has higher institutional tier
-                if z.get("smc_type") == "ORDER_BLOCK" and confluent.get("smc_type") != "ORDER_BLOCK":
+                if confluent.get("smc_type") == "BREAKER_BLOCK":
+                    confluent["smc_label"] = "Breaker"
+                elif confluent.get("smc_type") == "ORDER_BLOCK":
+                    confluent["smc_label"] = "OB Supply" if is_resistance else "OB Demand"
+                elif z.get("smc_type") == "BREAKER_BLOCK":
+                    confluent["smc_type"] = "BREAKER_BLOCK"
+                    confluent["smc_label"] = "Breaker"
+                elif z.get("smc_type") == "ORDER_BLOCK":
                     confluent["smc_type"] = z["smc_type"]
                     confluent["smc_label"] = "OB Supply" if is_resistance else "OB Demand"
-                elif z.get("smc_type") == "LIQUIDITY_POOL" and confluent.get("smc_type") not in ("ORDER_BLOCK", "LIQUIDITY_POOL"):
+                elif z.get("smc_type") == "LIQUIDITY_POOL" and confluent.get("smc_type") not in ("ORDER_BLOCK", "BREAKER_BLOCK", "LIQUIDITY_POOL"):
                     confluent["smc_type"] = z["smc_type"]
                     confluent["smc_label"] = "BSL" if is_resistance else "SSL"
 

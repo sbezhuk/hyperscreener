@@ -104,6 +104,68 @@ class TestSupportPierceIntegrity(unittest.TestCase):
         res_ob = next((r for r in res_pierced["resistances"] if abs(r["price"] - 100.75) <= 0.5), None)
         self.assertIsNotNone(res_ob, "Supply OB disappeared when price pierced above it!")
 
+    def test_support_flips_to_resistance_after_sustained_breakdown(self):
+        """
+        Role Reversal: If price breaks through support and does NOT return back (sustained breakdown),
+        the support level flips to overhead resistance (Підтримка -> Опір, Breaker).
+        """
+        candles = [
+            {"time": 1000 + i * 300, "open": 100.0, "high": 102.0, "low": 99.5, "close": 100.5, "volume": 100}
+            for i in range(20)
+        ]
+        # Support formed at 99.5
+        candles.append({"time": 7000, "open": 100.0, "high": 100.5, "low": 98.5, "close": 98.7, "volume": 200})
+        candles.append({"time": 7300, "open": 99.0, "high": 105.0, "low": 98.8, "close": 104.5, "volume": 500})
+        candles.append({"time": 7600, "open": 104.5, "high": 106.0, "low": 103.0, "close": 105.0, "volume": 300})
+
+        # Sustained breakdown: price collapses to 94.0 and stays below
+        candles.append({"time": 7900, "open": 103.0, "high": 103.0, "low": 95.0, "close": 95.5, "volume": 800})
+        candles.append({"time": 8200, "open": 95.5, "high": 96.0, "low": 91.0, "close": 92.0, "volume": 600})
+        candles.append({"time": 8500, "open": 92.0, "high": 95.0, "low": 91.5, "close": 94.0, "volume": 400})
+
+        res = analyze_levels(candles, interval="5m")
+        self.assertEqual(res["currentPrice"], 94.0)
+
+        # The level around 99.5 - 101.0 must now be in RESISTANCES (flipped to resistance)
+        flipped_res = next((r for r in res["resistances"] if r["price"] > 94.0 and r.get("smc_type") == "BREAKER_BLOCK"), None)
+        self.assertIsNotNone(
+            flipped_res,
+            "Broken support did not flip to resistance (Role Reversal failed)!"
+        )
+        self.assertEqual(flipped_res["type"], "resistance")
+        self.assertEqual(flipped_res["smc_label"], "Breaker")
+
+    def test_resistance_flips_to_support_after_sustained_breakout(self):
+        """
+        Role Reversal: If price breaks through resistance and does NOT return back (sustained breakout),
+        the resistance level flips to underlying support (Опір -> Підтримка, Breaker).
+        """
+        candles = [
+            {"time": 1000 + i * 300, "open": 100.0, "high": 101.0, "low": 98.0, "close": 99.0, "volume": 100}
+            for i in range(20)
+        ]
+        # Resistance formed at [99.5 .. 102.0]
+        candles.append({"time": 7000, "open": 99.0, "high": 102.0, "low": 98.8, "close": 101.8, "volume": 200})
+        candles.append({"time": 7300, "open": 101.5, "high": 101.8, "low": 95.0, "close": 95.5, "volume": 500})
+        candles.append({"time": 7600, "open": 95.5, "high": 96.0, "low": 92.0, "close": 93.0, "volume": 300})
+
+        # Sustained breakout: price pumps to 108.0 and stays above
+        candles.append({"time": 7900, "open": 93.0, "high": 104.0, "low": 93.0, "close": 103.5, "volume": 700})
+        candles.append({"time": 8200, "open": 103.5, "high": 108.0, "low": 103.0, "close": 107.5, "volume": 600})
+        candles.append({"time": 8500, "open": 107.5, "high": 109.0, "low": 106.0, "close": 107.0, "volume": 400})
+
+        res = analyze_levels(candles, interval="5m")
+        self.assertEqual(res["currentPrice"], 107.0)
+
+        # The broken resistance must now be in SUPPORTS (flipped to support)
+        flipped_sup = next((s for s in res["supports"] if s["price"] < 107.0 and s.get("smc_type") == "BREAKER_BLOCK"), None)
+        self.assertIsNotNone(
+            flipped_sup,
+            "Broken resistance did not flip to support (Role Reversal failed)!"
+        )
+        self.assertEqual(flipped_sup["type"], "support")
+        self.assertEqual(flipped_sup["smc_label"], "Breaker")
+
 
 if __name__ == "__main__":
     unittest.main()
