@@ -572,8 +572,15 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 <span>OB SUPPLY</span>
                 <span>{resistances[0] ? `${resistances[0].price}` : '—'}</span>
               </div>
-              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate">
-                {resistances[0] ? `${resistances[0].smc_label || 'Опір'} · S:${Math.round(resistances[0].strength_score || 80)}` : 'Немає вище'}
+              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate flex items-center gap-1">
+                {resistances[0] ? (
+                  <>
+                    <span>{resistances[0].smc_label || 'Опір'} · S:{Math.round(resistances[0].strength_score || 80)}</span>
+                    {resistances[0].has_fvg && <span className="px-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8px]">FVG</span>}
+                    {resistances[0].swept_liquidity && <span className="px-0.5 rounded bg-purple-500/20 text-purple-400 font-bold text-[8px]">SWEEP</span>}
+                    {resistances[0].zone_location === 'Premium' && <span className="px-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold text-[8px]">PREM</span>}
+                  </>
+                ) : 'Немає вище'}
               </div>
             </div>
             <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-1.5 rounded border border-emerald-500/20">
@@ -581,8 +588,15 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 <span>OB DEMAND</span>
                 <span>{supports[0] ? `${supports[0].price}` : '—'}</span>
               </div>
-              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate">
-                {supports[0] ? `${supports[0].smc_label || 'Підтримка'} · S:${Math.round(supports[0].strength_score || 80)}` : 'Немає нижче'}
+              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate flex items-center gap-1">
+                {supports[0] ? (
+                  <>
+                    <span>{supports[0].smc_label || 'Підтримка'} · S:{Math.round(supports[0].strength_score || 80)}</span>
+                    {supports[0].has_fvg && <span className="px-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8px]">FVG</span>}
+                    {supports[0].swept_liquidity && <span className="px-0.5 rounded bg-purple-500/20 text-purple-400 font-bold text-[8px]">SWEEP</span>}
+                    {supports[0].zone_location === 'Discount' && <span className="px-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold text-[8px]">DISC</span>}
+                  </>
+                ) : 'Немає нижче'}
               </div>
             </div>
           </div>
@@ -622,6 +636,21 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 {r.timeframe && (
                   <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
                     {r.timeframe.replace('h', 'H').replace('d', 'D')}
+                  </span>
+                )}
+                {r.has_fvg && (
+                  <span className="px-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold flex-shrink-0" title="Fair Value Gap Imbalance">
+                    FVG
+                  </span>
+                )}
+                {r.swept_liquidity && (
+                  <span className="px-0.5 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold flex-shrink-0" title="Зняття ліквідності (Sweep)">
+                    SWEEP
+                  </span>
+                )}
+                {r.zone_location && (
+                  <span className={`px-0.5 rounded text-[8px] font-bold flex-shrink-0 ${r.zone_location === 'Premium' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-teal-500/15 text-teal-400'}`} title={`Matrix: ${r.zone_location}`}>
+                    {r.zone_location === 'Premium' ? 'PREM' : 'DISC'}
                   </span>
                 )}
                 <span title={`Діапазон зони: ${r.bottom} - ${r.top}`} className="truncate">
@@ -685,6 +714,21 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 {s.timeframe && (
                   <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
                     {s.timeframe.replace('h', 'H').replace('d', 'D')}
+                  </span>
+                )}
+                {s.has_fvg && (
+                  <span className="px-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold flex-shrink-0" title="Fair Value Gap Imbalance">
+                    FVG
+                  </span>
+                )}
+                {s.swept_liquidity && (
+                  <span className="px-0.5 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold flex-shrink-0" title="Зняття ліквідності (Sweep)">
+                    SWEEP
+                  </span>
+                )}
+                {s.zone_location && (
+                  <span className={`px-0.5 rounded text-[8px] font-bold flex-shrink-0 ${s.zone_location === 'Discount' ? 'bg-teal-500/15 text-teal-400' : 'bg-indigo-500/15 text-indigo-400'}`} title={`Matrix: ${s.zone_location}`}>
+                    {s.zone_location === 'Discount' ? 'DISC' : 'PREM'}
                   </span>
                 )}
                 <span title={`Діапазон зони: ${s.bottom} - ${s.top}`} className="truncate">

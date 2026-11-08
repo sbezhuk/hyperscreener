@@ -4,6 +4,7 @@ from app.analyzer.levels import (
     _detect_smc_order_blocks,
     _detect_smc_liquidity_pools,
     _calculate_atr,
+    compute_smc_zone_strength,
 )
 
 
@@ -169,6 +170,117 @@ class TestSMCLevels(unittest.TestCase):
             lowest_resistance["bottom"],
             highest_support["top"],
             "Resistance and Support cannot overlap or share the same price level"
+        )
+
+    def test_smc_strength_score_poi_trifecta(self):
+        """
+        Tests the SMC POI strength formula:
+        Strong POI = Order Block + Imbalance (FVG) + Liquidity Sweep
+        """
+        # A+ POI: OB with FVG, Sweep, Discount alignment on 4H
+        a_plus_poi = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            has_fvg=True,
+            swept_liquidity=True,
+            caused_bos=True,
+            displacement_atr=2.2,
+            vol_ratio=1.8,
+            zone_location="Discount",
+            interval="4h",
+            is_mitigated=False,
+        )
+        self.assertGreaterEqual(a_plus_poi["strength_score"], 90.0)
+        self.assertEqual(a_plus_poi["strength_category"], "Very Strong")
+        self.assertEqual(a_plus_poi["strength_stars"], 5)
+
+        # Baseline OB without FVG or Sweep
+        basic_ob = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            has_fvg=False,
+            swept_liquidity=False,
+            caused_bos=False,
+            displacement_atr=1.1,
+            vol_ratio=1.0,
+            zone_location="Equilibrium",
+            interval="4h",
+            is_mitigated=False,
+        )
+        self.assertLess(basic_ob["strength_score"], a_plus_poi["strength_score"])
+
+    def test_smc_premium_discount_matrix_scoring(self):
+        """
+        Tests Premium vs Discount matrix alignment:
+        - Resistances are strong in Premium (>50%), weak in Discount (<50%).
+        - Supports are strong in Discount (<50%), weak in Premium (>50%).
+        """
+        # Resistance in Premium vs Resistance in Discount
+        res_in_premium = compute_smc_zone_strength(
+            zone_type="resistance",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            zone_location="Premium",
+            interval="1h",
+        )
+        res_in_discount = compute_smc_zone_strength(
+            zone_type="resistance",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            zone_location="Discount",
+            interval="1h",
+        )
+        self.assertGreater(
+            res_in_premium["strength_score"],
+            res_in_discount["strength_score"],
+            "Resistances in Premium must score higher than resistances in Discount"
+        )
+
+        # Support in Discount vs Support in Premium
+        sup_in_discount = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            zone_location="Discount",
+            interval="1h",
+        )
+        sup_in_premium = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            zone_location="Premium",
+            interval="1h",
+        )
+        self.assertGreater(
+            sup_in_discount["strength_score"],
+            sup_in_premium["strength_score"],
+            "Supports in Discount must score higher than supports in Premium"
+        )
+
+    def test_smc_touches_liquidity_accumulation(self):
+        """
+        In SMC, excessive touches (>= 3) indicate a liquidity build-up pool
+        (Equal Highs / Equal Lows) that is prone to being swept/broken,
+        so it receives a penalty compared to fresh (1 touch) unmitigated levels.
+        """
+        fresh_ob = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=1,
+            is_mitigated=False,
+        )
+        multi_touch_ob = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="ORDER_BLOCK",
+            touches=4,
+            is_mitigated=True,
+        )
+        self.assertGreater(
+            fresh_ob["strength_score"],
+            multi_touch_ob["strength_score"],
+            "Fresh unmitigated OB must have higher strength score than a 4-touch liquidity pool"
         )
 
 

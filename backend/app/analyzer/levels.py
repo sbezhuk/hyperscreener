@@ -583,21 +583,176 @@ def calculate_pivot_points(
 
 
 # ---------------------------------------------------------------------------
-# Smart Money Concepts (SMC) Engine: Order Blocks, Breakers & Liquidity Pools
+# Smart Money Concepts (SMC) Engine: Strength Calculation & POI Detection
 # ---------------------------------------------------------------------------
+
+def compute_smc_zone_strength(
+    zone_type: str,
+    smc_type: str,
+    touches: int,
+    has_fvg: bool = False,
+    swept_liquidity: bool = False,
+    caused_bos: bool = False,
+    displacement_atr: float = 1.2,
+    vol_ratio: float = 1.0,
+    zone_location: str = "Equilibrium",
+    interval: str = "5m",
+    is_mitigated: bool = False,
+) -> Dict[str, Any]:
+    """
+    Computes institutional Smart Money Concepts (SMC) strength score (0-100)
+    and strength category based on POI algorithmic principles:
+
+    POI Formula:
+      Strong POI = Order Block + Imbalance (FVG) + Liquidity Sweep
+
+    Criteria:
+      1. Base institutional weighting by SMC primitive
+      2. Imbalance (Fair Value Gap / FVG): +12 pts
+      3. Liquidity Sweep: +14 pts (Smart money stop hunt before reversal)
+      4. Break of Structure (BOS / CHoCH): +10 pts
+      5. Full POI Trifecta (OB + FVG + Sweep): +4 pts combo bonus
+      6. Premium vs Discount Matrix:
+         - Resistance / Supply in Premium (> 50%): +8 pts; in Discount: -12 pts
+         - Support / Demand in Discount (< 50%): +8 pts; in Premium: -12 pts
+      7. Number of touches & mitigation:
+         - 1 touch (Fresh / Unmitigated): +8 pts
+         - 2 touches (1st Retest): +3 pts
+         - >= 3 touches (Liquidity accumulation): -12 pts (likely to be swept rather than hold)
+      8. Volume confirmation (POC / Volume surge vs average):
+         - vol_ratio >= 2.0: +8 pts
+         - vol_ratio >= 1.4: +5 pts
+         - vol_ratio >= 1.0: +2 pts
+         - vol_ratio < 0.8: -5 pts
+      9. Impulse reaction / Displacement:
+         - displacement_atr >= 2.5: +8 pts
+         - displacement_atr >= 1.6: +5 pts
+         - displacement_atr >= 1.0: +2 pts
+         - displacement_atr < 1.0: -4 pts
+      10. Timeframe hierarchy:
+         - HTF (1w, 3d, 1d): +8 pts
+         - MTF (4h, 1h): +4 pts
+         - LTF (15m, 5m): 0 pts
+         - Scalp (1m): -4 pts
+    """
+    # 1. Base Score
+    if smc_type == "ORDER_BLOCK":
+        base = 52.0
+    elif smc_type == "BREAKER_BLOCK":
+        base = 46.0
+    elif smc_type == "LIQUIDITY_POOL":
+        base = 44.0
+    elif smc_type == "STRUCTURE_ORIGIN":
+        base = 42.0
+    elif smc_type == "PIVOT":
+        base = 42.0
+    else:
+        base = 40.0
+
+    score = base
+
+    # 2. Imbalance (FVG)
+    if has_fvg:
+        score += 12.0
+
+    # 3. Liquidity Sweep
+    if swept_liquidity:
+        score += 14.0
+
+    # 4. Break of Structure (BOS / CHoCH)
+    if caused_bos:
+        score += 10.0
+
+    # 5. POI Trifecta Combo
+    if has_fvg and swept_liquidity:
+        score += 4.0
+
+    # 6. Premium vs Discount Alignment
+    if zone_type == "resistance":
+        if zone_location == "Premium":
+            score += 8.0
+        elif zone_location == "Discount":
+            score -= 12.0
+    elif zone_type == "support":
+        if zone_location == "Discount":
+            score += 8.0
+        elif zone_location == "Premium":
+            score -= 12.0
+
+    # 7. Touches & Mitigation
+    if touches <= 1 and not is_mitigated:
+        score += 8.0
+    elif touches == 2:
+        score += 3.0
+    elif touches >= 3:
+        score -= 12.0
+
+    # 8. Volume Confirmation
+    if vol_ratio >= 2.0:
+        score += 8.0
+    elif vol_ratio >= 1.4:
+        score += 5.0
+    elif vol_ratio >= 1.0:
+        score += 2.0
+    elif vol_ratio < 0.8:
+        score -= 5.0
+
+    # 9. Displacement Impulse
+    if displacement_atr >= 2.5:
+        score += 8.0
+    elif displacement_atr >= 1.6:
+        score += 5.0
+    elif displacement_atr >= 1.0:
+        score += 2.0
+    else:
+        score -= 4.0
+
+    # 10. Timeframe hierarchy
+    tf = interval.lower()
+    if tf in ("1w", "3d", "1d"):
+        score += 8.0
+    elif tf in ("4h", "1h"):
+        score += 4.0
+    elif tf in ("15m", "5m"):
+        score += 0.0
+    elif tf == "1m":
+        score -= 4.0
+
+    final_score = round(max(15.0, min(100.0, score)), 1)
+
+    # Strength Category Classification
+    if final_score >= 85.0:
+        category = "Very Strong"
+    elif final_score >= 70.0:
+        category = "Strong"
+    elif final_score >= 55.0:
+        category = "Moderate"
+    else:
+        category = "Weak"
+
+    return {
+        "strength_score": final_score,
+        "strength_category": category,
+        "strength_stars": int(min(max(round(final_score / 20.0), 1), 5)),
+    }
+
 
 def _detect_smc_order_blocks(
     candles: List[Dict[str, Any]],
     atr: float,
     current_price: float,
     interval: str = "5m",
+    range_high: Optional[float] = None,
+    range_low: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Detects institutional Smart Money Order Blocks (OB) and Breaker Blocks.
+    Detects institutional Smart Money Order Blocks (OB) and Breaker Blocks
+    with advanced SMC criteria:
     - Bullish OB (Demand): The last bearish candle before an aggressive upward displacement
       that breaks structure or creates an imbalance (FVG).
     - Bearish OB (Supply): The last bullish candle before an aggressive downward displacement
       that breaks structure or creates an imbalance (FVG).
+    - Liquidity Sweeps: Takes out prior swing highs/lows before reversing (Institutional Stop Hunt).
     - Breaker Blocks: An Order Block whose boundary was violated with a candle close,
       flipping its role (Role Reversal).
     """
@@ -608,8 +763,16 @@ def _detect_smc_order_blocks(
     order_blocks: List[Dict[str, Any]] = []
     decimals = 6 if current_price < 1 else 4 if current_price < 100 else 2
 
+    recent_context = candles[-min(n, 100):]
+    if range_high is None:
+        range_high = max(c["high"] for c in recent_context)
+    if range_low is None:
+        range_low = min(c["low"] for c in recent_context)
+    range_span = max(range_high - range_low, 1e-6)
+
+    avg_vol = sum(c.get("volume", 0) for c in recent_context) / max(len(recent_context), 1)
+
     # Focus scan on recent structural context (last 75 candles)
-    # Ancient broken candles from hundreds of bars ago are historical noise, not active trading zones.
     lookback = min(n - 2, 75)
     start_idx = max(0, n - 2 - lookback)
 
@@ -629,16 +792,33 @@ def _detect_smc_order_blocks(
                 max_future_high = max(fc["high"] for fc in future_candles)
                 max_future_close = max(fc["close"] for fc in future_candles)
                 displacement = max_future_high - c_low
+                disp_atr = displacement / max(atr, 1e-6)
 
                 # Criteria: closes above candle high and displacement >= 1.0 * ATR
                 if (max_future_close > c_high and displacement >= 1.0 * atr) or (displacement >= 1.4 * atr):
+                    # 1. Imbalance (FVG):
                     has_fvg = bool(i + 2 < n and candles[i + 2]["low"] > c_high)
-                    prior_highs = [candles[k]["high"] for k in range(max(0, i - 12), i)]
+
+                    # 2. Liquidity Sweep: setup candle took out prior swing lows before reversing
+                    prior_lows = [candles[k]["low"] for k in range(max(0, i - 15), i)]
+                    swept_liquidity = bool(prior_lows and c_low < min(prior_lows))
+
+                    # 3. Break of Structure (BOS / CHoCH):
+                    prior_highs = [candles[k]["high"] for k in range(max(0, i - 15), i)]
                     caused_bos = bool(prior_highs and max_future_high > max(prior_highs))
 
                     ob_top = c_high
                     ob_bottom = c_low
                     ob_center = (ob_top + ob_bottom) / 2.0
+
+                    # 4. Premium vs Discount Matrix:
+                    ratio = (ob_center - range_low) / range_span
+                    zone_loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
+
+                    # 5. Volume Confirmation:
+                    setup_vol = c.get("volume", 0)
+                    disp_vol = max((fc.get("volume", 0) for fc in future_candles), default=setup_vol)
+                    vol_ratio = max(setup_vol, disp_vol) / max(avg_vol, 1e-6)
 
                     subsequent = candles[i + len(future_candles) : n]
                     is_broken = False
@@ -661,21 +841,40 @@ def _detect_smc_order_blocks(
                         # Only valid as support when current price is strictly ABOVE the demand zone
                         if current_price >= ob_top:
                             is_mitigated = touches > 1
-                            status = "retested" if is_mitigated else "active"
-                            base_score = 82.0 if is_mitigated else 92.0
-                            if has_fvg:
-                                base_score += 5.0
-                            if caused_bos:
-                                base_score += 4.0
+                            # Touches logic in SMC:
+                            # 1 touch: fresh active POI
+                            # 2 touches: tested reaction
+                            # >= 3 touches: weakening (liquidity build-up target)
+                            if touches >= 3:
+                                status = "weakening"
+                            elif is_mitigated:
+                                status = "retested"
+                            else:
+                                status = "active"
+
+                            str_info = compute_smc_zone_strength(
+                                zone_type="support",
+                                smc_type="ORDER_BLOCK",
+                                touches=touches,
+                                has_fvg=has_fvg,
+                                swept_liquidity=swept_liquidity,
+                                caused_bos=caused_bos,
+                                displacement_atr=disp_atr,
+                                vol_ratio=vol_ratio,
+                                zone_location=zone_loc,
+                                interval=interval,
+                                is_mitigated=is_mitigated,
+                            )
 
                             order_blocks.append({
                                 "center_price": round(ob_center, decimals),
                                 "upper_price": round(ob_top, decimals),
                                 "lower_price": round(ob_bottom, decimals),
-                                "touches_count": min(touches, 3),
-                                "average_bounce_atr": 1.5,
-                                "volume_confirmation": 0.85,
-                                "strength_score": min(base_score, 100.0),
+                                "touches_count": min(touches, 5),
+                                "average_bounce_atr": round(min(disp_atr, 3.5), 2),
+                                "volume_confirmation": round(min(vol_ratio / 2.0, 1.0), 2),
+                                "strength_score": str_info["strength_score"],
+                                "strength_category": str_info["strength_category"],
                                 "status": status,
                                 "zone_id": f"smc-ob-dem-{i}-{str(uuid.uuid4())[:4]}",
                                 "type": "support",
@@ -686,7 +885,11 @@ def _detect_smc_order_blocks(
                                 "smc_label": "OB Demand",
                                 "is_mitigated": is_mitigated,
                                 "has_fvg": has_fvg,
+                                "swept_liquidity": swept_liquidity,
                                 "caused_bos": caused_bos,
+                                "zone_location": zone_loc,
+                                "vol_ratio": round(vol_ratio, 2),
+                                "displacement_atr": round(disp_atr, 2),
                             })
                     else:
                         # Breaker Block validation:
@@ -703,14 +906,28 @@ def _detect_smc_order_blocks(
                             and current_price <= ob_bottom
                             and not closed_back_above
                         ):
+                            str_info = compute_smc_zone_strength(
+                                zone_type="resistance",
+                                smc_type="BREAKER_BLOCK",
+                                touches=touches,
+                                has_fvg=has_fvg,
+                                swept_liquidity=True,
+                                caused_bos=caused_bos,
+                                displacement_atr=disp_atr,
+                                vol_ratio=vol_ratio,
+                                zone_location=zone_loc,
+                                interval=interval,
+                                is_mitigated=True,
+                            )
                             order_blocks.append({
                                 "center_price": round(ob_center, decimals),
                                 "upper_price": round(ob_top, decimals),
                                 "lower_price": round(ob_bottom, decimals),
-                                "touches_count": min(touches, 3),
-                                "average_bounce_atr": 1.3,
-                                "volume_confirmation": 0.80,
-                                "strength_score": 78.0,
+                                "touches_count": min(touches, 5),
+                                "average_bounce_atr": round(min(disp_atr, 3.5), 2),
+                                "volume_confirmation": round(min(vol_ratio / 2.0, 1.0), 2),
+                                "strength_score": str_info["strength_score"],
+                                "strength_category": str_info["strength_category"],
                                 "status": "retested",
                                 "zone_id": f"smc-brk-res-{i}-{str(uuid.uuid4())[:4]}",
                                 "type": "resistance",
@@ -721,7 +938,11 @@ def _detect_smc_order_blocks(
                                 "smc_label": "Breaker",
                                 "is_mitigated": True,
                                 "has_fvg": has_fvg,
+                                "swept_liquidity": True,
                                 "caused_bos": caused_bos,
+                                "zone_location": zone_loc,
+                                "vol_ratio": round(vol_ratio, 2),
+                                "displacement_atr": round(disp_atr, 2),
                             })
 
         # 2. Bearish Order Block (Supply candidate):
@@ -732,16 +953,33 @@ def _detect_smc_order_blocks(
                 min_future_low = min(fc["low"] for fc in future_candles)
                 min_future_close = min(fc["close"] for fc in future_candles)
                 displacement = c_high - min_future_low
+                disp_atr = displacement / max(atr, 1e-6)
 
                 # Criteria: closes below candle low and displacement >= 1.0 * ATR
                 if (min_future_close < c_low and displacement >= 1.0 * atr) or (displacement >= 1.4 * atr):
+                    # 1. Imbalance (FVG):
                     has_fvg = bool(i + 2 < n and candles[i + 2]["high"] < c_low)
-                    prior_lows = [candles[k]["low"] for k in range(max(0, i - 12), i)]
+
+                    # 2. Bearish Liquidity Sweep: took out prior swing highs before dumping
+                    prior_highs = [candles[k]["high"] for k in range(max(0, i - 15), i)]
+                    swept_liquidity = bool(prior_highs and c_high > max(prior_highs))
+
+                    # 3. Break of Structure (BOS / CHoCH):
+                    prior_lows = [candles[k]["low"] for k in range(max(0, i - 15), i)]
                     caused_bos = bool(prior_lows and min_future_low < min(prior_lows))
 
                     ob_top = c_high
                     ob_bottom = c_low
                     ob_center = (ob_top + ob_bottom) / 2.0
+
+                    # 4. Premium vs Discount Matrix:
+                    ratio = (ob_center - range_low) / range_span
+                    zone_loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
+
+                    # 5. Volume Confirmation:
+                    setup_vol = c.get("volume", 0)
+                    disp_vol = max((fc.get("volume", 0) for fc in future_candles), default=setup_vol)
+                    vol_ratio = max(setup_vol, disp_vol) / max(avg_vol, 1e-6)
 
                     subsequent = candles[i + len(future_candles) : n]
                     is_broken = False
@@ -764,21 +1002,36 @@ def _detect_smc_order_blocks(
                         # Only valid as resistance when current price is strictly BELOW the supply zone
                         if current_price <= ob_bottom:
                             is_mitigated = touches > 1
-                            status = "retested" if is_mitigated else "active"
-                            base_score = 82.0 if is_mitigated else 92.0
-                            if has_fvg:
-                                base_score += 5.0
-                            if caused_bos:
-                                base_score += 4.0
+                            if touches >= 3:
+                                status = "weakening"
+                            elif is_mitigated:
+                                status = "retested"
+                            else:
+                                status = "active"
+
+                            str_info = compute_smc_zone_strength(
+                                zone_type="resistance",
+                                smc_type="ORDER_BLOCK",
+                                touches=touches,
+                                has_fvg=has_fvg,
+                                swept_liquidity=swept_liquidity,
+                                caused_bos=caused_bos,
+                                displacement_atr=disp_atr,
+                                vol_ratio=vol_ratio,
+                                zone_location=zone_loc,
+                                interval=interval,
+                                is_mitigated=is_mitigated,
+                            )
 
                             order_blocks.append({
                                 "center_price": round(ob_center, decimals),
                                 "upper_price": round(ob_top, decimals),
                                 "lower_price": round(ob_bottom, decimals),
-                                "touches_count": min(touches, 3),
-                                "average_bounce_atr": 1.5,
-                                "volume_confirmation": 0.85,
-                                "strength_score": min(base_score, 100.0),
+                                "touches_count": min(touches, 5),
+                                "average_bounce_atr": round(min(disp_atr, 3.5), 2),
+                                "volume_confirmation": round(min(vol_ratio / 2.0, 1.0), 2),
+                                "strength_score": str_info["strength_score"],
+                                "strength_category": str_info["strength_category"],
                                 "status": status,
                                 "zone_id": f"smc-ob-sup-{i}-{str(uuid.uuid4())[:4]}",
                                 "type": "resistance",
@@ -789,7 +1042,11 @@ def _detect_smc_order_blocks(
                                 "smc_label": "OB Supply",
                                 "is_mitigated": is_mitigated,
                                 "has_fvg": has_fvg,
+                                "swept_liquidity": swept_liquidity,
                                 "caused_bos": caused_bos,
+                                "zone_location": zone_loc,
+                                "vol_ratio": round(vol_ratio, 2),
+                                "displacement_atr": round(disp_atr, 2),
                             })
                     else:
                         # Breaker Block validation:
@@ -806,14 +1063,28 @@ def _detect_smc_order_blocks(
                             and current_price >= ob_top
                             and not closed_back_below
                         ):
+                            str_info = compute_smc_zone_strength(
+                                zone_type="support",
+                                smc_type="BREAKER_BLOCK",
+                                touches=touches,
+                                has_fvg=has_fvg,
+                                swept_liquidity=True,
+                                caused_bos=caused_bos,
+                                displacement_atr=disp_atr,
+                                vol_ratio=vol_ratio,
+                                zone_location=zone_loc,
+                                interval=interval,
+                                is_mitigated=True,
+                            )
                             order_blocks.append({
                                 "center_price": round(ob_center, decimals),
                                 "upper_price": round(ob_top, decimals),
                                 "lower_price": round(ob_bottom, decimals),
-                                "touches_count": min(touches, 3),
-                                "average_bounce_atr": 1.3,
-                                "volume_confirmation": 0.80,
-                                "strength_score": 78.0,
+                                "touches_count": min(touches, 5),
+                                "average_bounce_atr": round(min(disp_atr, 3.5), 2),
+                                "volume_confirmation": round(min(vol_ratio / 2.0, 1.0), 2),
+                                "strength_score": str_info["strength_score"],
+                                "strength_category": str_info["strength_category"],
                                 "status": "retested",
                                 "zone_id": f"smc-brk-sup-{i}-{str(uuid.uuid4())[:4]}",
                                 "type": "support",
@@ -824,7 +1095,11 @@ def _detect_smc_order_blocks(
                                 "smc_label": "Breaker",
                                 "is_mitigated": True,
                                 "has_fvg": has_fvg,
+                                "swept_liquidity": True,
                                 "caused_bos": caused_bos,
+                                "zone_location": zone_loc,
+                                "vol_ratio": round(vol_ratio, 2),
+                                "displacement_atr": round(disp_atr, 2),
                             })
 
     return order_blocks
@@ -836,6 +1111,8 @@ def _detect_smc_liquidity_pools(
     atr: float,
     current_price: float,
     interval: str = "5m",
+    range_high: Optional[float] = None,
+    range_low: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Detects Buy-Side Liquidity (BSL / Equal Highs) and Sell-Side Liquidity (SSL / Equal Lows).
@@ -847,6 +1124,14 @@ def _detect_smc_liquidity_pools(
     pools: List[Dict[str, Any]] = []
     decimals = 6 if current_price < 1 else 4 if current_price < 100 else 2
     tolerance = 0.4 * atr
+    n = len(candles)
+
+    recent_context = candles[-min(n, 100):]
+    if range_high is None:
+        range_high = max(c["high"] for c in recent_context)
+    if range_low is None:
+        range_low = min(c["low"] for c in recent_context)
+    range_span = max(range_high - range_low, 1e-6)
 
     # 1. BSL - Equal Highs (EQH)
     highs = swings.get("highs", [])
@@ -881,16 +1166,29 @@ def _detect_smc_liquidity_pools(
                     continue
                 bottom = max(avg_px - 0.25 * atr, current_price + 0.05 * atr)
                 zone_type = "resistance"
-                score = 75.0 if is_swept else min(88.0 + len(cluster) * 3.0, 98.0)
+
+                ratio = (avg_px - range_low) / range_span
+                zone_loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
+
+                str_info = compute_smc_zone_strength(
+                    zone_type="resistance",
+                    smc_type="LIQUIDITY_POOL",
+                    touches=len(cluster),
+                    swept_liquidity=is_swept,
+                    zone_location=zone_loc,
+                    interval=interval,
+                    is_mitigated=is_swept,
+                )
 
                 pools.append({
                     "center_price": round(avg_px, decimals),
                     "upper_price": round(top, decimals),
                     "lower_price": round(bottom, decimals),
-                    "touches_count": min(len(cluster), 3),
+                    "touches_count": min(len(cluster), 5),
                     "average_bounce_atr": 1.3,
                     "volume_confirmation": 0.75,
-                    "strength_score": score,
+                    "strength_score": str_info["strength_score"],
+                    "strength_category": str_info["strength_category"],
                     "status": "retested" if is_swept else "active",
                     "zone_id": f"smc-bsl-{str(uuid.uuid4())[:4]}",
                     "type": zone_type,
@@ -900,6 +1198,7 @@ def _detect_smc_liquidity_pools(
                     "smc_type": "LIQUIDITY_POOL",
                     "smc_label": "BSL",
                     "is_mitigated": is_swept,
+                    "zone_location": zone_loc,
                 })
 
     # 2. SSL - Equal Lows (EQL)
@@ -935,16 +1234,29 @@ def _detect_smc_liquidity_pools(
                     continue
                 top = min(avg_px + 0.25 * atr, current_price - 0.05 * atr)
                 zone_type = "support"
-                score = 75.0 if is_swept else min(88.0 + len(cluster) * 3.0, 98.0)
+
+                ratio = (avg_px - range_low) / range_span
+                zone_loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
+
+                str_info = compute_smc_zone_strength(
+                    zone_type="support",
+                    smc_type="LIQUIDITY_POOL",
+                    touches=len(cluster),
+                    swept_liquidity=is_swept,
+                    zone_location=zone_loc,
+                    interval=interval,
+                    is_mitigated=is_swept,
+                )
 
                 pools.append({
                     "center_price": round(avg_px, decimals),
                     "upper_price": round(top, decimals),
                     "lower_price": round(bottom, decimals),
-                    "touches_count": min(len(cluster), 3),
+                    "touches_count": min(len(cluster), 5),
                     "average_bounce_atr": 1.3,
                     "volume_confirmation": 0.75,
-                    "strength_score": score,
+                    "strength_score": str_info["strength_score"],
+                    "strength_category": str_info["strength_category"],
                     "status": "retested" if is_swept else "active",
                     "zone_id": f"smc-ssl-{str(uuid.uuid4())[:4]}",
                     "type": zone_type,
@@ -954,6 +1266,7 @@ def _detect_smc_liquidity_pools(
                     "smc_type": "LIQUIDITY_POOL",
                     "smc_label": "SSL",
                     "is_mitigated": is_swept,
+                    "zone_location": zone_loc,
                 })
 
     return pools
@@ -1014,12 +1327,22 @@ def analyze_levels(
     prominence = cfg.get("prominence", 0.5)
     swings = _find_swings(candles, left_bars, right_bars, atr=atr, min_prominence_atr=prominence)
 
+    # Calculate dealing range (Range High & Range Low) for Premium vs Discount matrix
+    recent_context = candles[-min(n, 100):]
+    range_high = max(c["high"] for c in recent_context)
+    range_low = min(c["low"] for c in recent_context)
+    range_span = max(range_high - range_low, 1e-6)
+
     # Step 3 – Smart Money Concepts Detection:
     # 3.1 Order Blocks & Breakers
-    smc_obs = _detect_smc_order_blocks(candles, atr, current_price, interval=interval)
+    smc_obs = _detect_smc_order_blocks(
+        candles, atr, current_price, interval=interval, range_high=range_high, range_low=range_low
+    )
 
     # 3.2 Liquidity Pools (BSL / SSL)
-    smc_pools = _detect_smc_liquidity_pools(candles, swings, atr, current_price, interval=interval)
+    smc_pools = _detect_smc_liquidity_pools(
+        candles, swings, atr, current_price, interval=interval, range_high=range_high, range_low=range_low
+    )
 
     # 3.3 Key Structural Swings (Swing Demand & Supply)
     structural_swings: List[Dict[str, Any]] = []
@@ -1028,6 +1351,15 @@ def analyze_levels(
         if px > current_price:
             half_w = max(0.20 * atr, px * 0.0008)
             lower_p = max(px - half_w, current_price + 0.05 * atr)
+            ratio = (px - range_low) / range_span
+            loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
+            str_info = compute_smc_zone_strength(
+                zone_type="resistance",
+                smc_type="STRUCTURE_ORIGIN",
+                touches=1,
+                zone_location=loc,
+                interval=interval,
+            )
             structural_swings.append({
                 "center_price": round(px, decimals),
                 "upper_price": round(px + half_w, decimals),
@@ -1035,7 +1367,8 @@ def analyze_levels(
                 "touches_count": 1,
                 "average_bounce_atr": 1.2,
                 "volume_confirmation": 0.7,
-                "strength_score": 75.0,
+                "strength_score": str_info["strength_score"],
+                "strength_category": str_info["strength_category"],
                 "status": "active",
                 "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
                 "type": "resistance",
@@ -1044,6 +1377,7 @@ def analyze_levels(
                 "last_tested_at": h["time"],
                 "smc_type": "STRUCTURE_ORIGIN",
                 "smc_label": "Supply",
+                "zone_location": loc,
             })
 
     for l in swings.get("lows", []):
@@ -1051,6 +1385,15 @@ def analyze_levels(
         if px < current_price:
             half_w = max(0.20 * atr, px * 0.0008)
             upper_p = min(px + half_w, current_price - 0.05 * atr)
+            ratio = (px - range_low) / range_span
+            loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
+            str_info = compute_smc_zone_strength(
+                zone_type="support",
+                smc_type="STRUCTURE_ORIGIN",
+                touches=1,
+                zone_location=loc,
+                interval=interval,
+            )
             structural_swings.append({
                 "center_price": round(px, decimals),
                 "upper_price": round(upper_p, decimals),
@@ -1058,7 +1401,8 @@ def analyze_levels(
                 "touches_count": 1,
                 "average_bounce_atr": 1.2,
                 "volume_confirmation": 0.7,
-                "strength_score": 75.0,
+                "strength_score": str_info["strength_score"],
+                "strength_category": str_info["strength_category"],
                 "status": "active",
                 "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
                 "type": "support",
@@ -1067,6 +1411,7 @@ def analyze_levels(
                 "last_tested_at": l["time"],
                 "smc_type": "STRUCTURE_ORIGIN",
                 "smc_label": "Demand",
+                "zone_location": loc,
             })
 
     # Optional classic pivot points candidate generation if explicitly requested
@@ -1202,7 +1547,15 @@ def analyze_levels(
             confluent = next((sz for sz in selected if abs(z["center_price"] - sz["center_price"]) < min_sep), None)
             if confluent:
                 confluent["touches"] = min(max(confluent.get("touches", 1), z.get("touches", 1)), 3)
-                confluent["strength_score"] = min(confluent.get("strength_score", 75.0) + 3.0, 100.0)
+                if z.get("has_fvg"):
+                    confluent["has_fvg"] = True
+                if z.get("swept_liquidity"):
+                    confluent["swept_liquidity"] = True
+                if z.get("caused_bos"):
+                    confluent["caused_bos"] = True
+                confluent["strength_score"] = min(confluent.get("strength_score", 75.0) + 4.0, 100.0)
+                sc = confluent["strength_score"]
+                confluent["strength_category"] = "Very Strong" if sc >= 85 else "Strong" if sc >= 70 else "Moderate"
                 # Upgrade label if confluent candidate has higher institutional tier
                 if z.get("smc_type") == "ORDER_BLOCK" and confluent.get("smc_type") != "ORDER_BLOCK":
                     confluent["smc_type"] = z["smc_type"]
@@ -1261,6 +1614,15 @@ def analyze_levels(
 
         half_w = max(0.25 * atr, chosen_l * 0.0008)
         u_p = min(chosen_l + half_w, current_price - 0.05 * atr)
+        ratio = (chosen_l - range_low) / range_span
+        loc = "Discount" if ratio <= 0.48 else "Premium" if ratio >= 0.52 else "Equilibrium"
+        str_info = compute_smc_zone_strength(
+            zone_type="support",
+            smc_type="STRUCTURE_ORIGIN",
+            touches=1,
+            zone_location=loc,
+            interval=interval,
+        )
         zone = {
             "center_price": round(chosen_l, decimals),
             "upper_price": round(u_p, decimals),
@@ -1268,7 +1630,8 @@ def analyze_levels(
             "touches_count": 1,
             "average_bounce_atr": 1.0,
             "volume_confirmation": 0.5,
-            "strength_score": 70.0,
+            "strength_score": str_info["strength_score"],
+            "strength_category": str_info["strength_category"],
             "status": "active",
             "zone_id": str(uuid.uuid4())[:8],
             "type": "support",
@@ -1277,6 +1640,7 @@ def analyze_levels(
             "last_tested_at": s_time,
             "smc_type": "STRUCTURE_ORIGIN",
             "smc_label": "OB Demand",
+            "zone_location": loc,
         }
         clean_supports.append(_add_legacy_fields(zone, current_price))
 
@@ -1293,6 +1657,15 @@ def analyze_levels(
 
         half_w = max(0.25 * atr, chosen_h * 0.0008)
         l_p = max(chosen_h - half_w, current_price + 0.05 * atr)
+        ratio = (chosen_h - range_low) / range_span
+        loc = "Premium" if ratio >= 0.52 else "Discount" if ratio <= 0.48 else "Equilibrium"
+        str_info = compute_smc_zone_strength(
+            zone_type="resistance",
+            smc_type="STRUCTURE_ORIGIN",
+            touches=1,
+            zone_location=loc,
+            interval=interval,
+        )
         zone = {
             "center_price": round(chosen_h, decimals),
             "upper_price": round(chosen_h + half_w, decimals),
@@ -1300,7 +1673,8 @@ def analyze_levels(
             "touches_count": 1,
             "average_bounce_atr": 1.0,
             "volume_confirmation": 0.5,
-            "strength_score": 70.0,
+            "strength_score": str_info["strength_score"],
+            "strength_category": str_info["strength_category"],
             "status": "active",
             "zone_id": str(uuid.uuid4())[:8],
             "type": "resistance",
@@ -1309,6 +1683,7 @@ def analyze_levels(
             "last_tested_at": r_time,
             "smc_type": "STRUCTURE_ORIGIN",
             "smc_label": "OB Supply",
+            "zone_location": loc,
         }
         clean_resistances.append(_add_legacy_fields(zone, current_price))
 

@@ -65,6 +65,11 @@ export interface LevelItem {
   is_mitigated?: boolean;
   has_fvg?: boolean;
   caused_bos?: boolean;
+  swept_liquidity?: boolean;
+  zone_location?: 'Premium' | 'Discount' | 'Equilibrium';
+  vol_ratio?: number;
+  displacement_atr?: number;
+  strength_category?: 'Weak' | 'Moderate' | 'Strong' | 'Very Strong';
 }
 
 export interface PivotPointsData {
