@@ -6,19 +6,37 @@ import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
 import { Timeframe, normalizeTimeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle, ConnectionState, WSConnectionDetails, SignalItem } from './types';
+import {
+  getInitialCoin,
+  saveSelectedCoin,
+  getInitialTimeframe,
+  saveSelectedTimeframe,
+  getInitialFormation,
+  saveActiveFormation,
+  getInitialSelectedTfs,
+  saveSelectedTfs,
+  getInitialMinStrength,
+  saveMinStrength,
+  getInitialConfirmedOi,
+  saveConfirmedOi,
+  syncUrlState,
+} from './utils/storage';
 
 const API_BASE = 'http://localhost:8000';
 const WS_BASE = 'ws://localhost:8000/ws';
 
 export function App() {
-  const [selectedCoin, setSelectedCoin] = useState<string>('ETH');
-  const [timeframe, setTimeframe] = useState<Timeframe>('1D');
-  const [activeFormation, setActiveFormation] = useState<FormationFilter>('CASCADE');
+  const [selectedCoin, setSelectedCoin] = useState<string>(() => getInitialCoin('ETH'));
+  const [timeframe, setTimeframe] = useState<Timeframe>(() => getInitialTimeframe('1D'));
+  const [activeFormation, setActiveFormation] = useState<FormationFilter>(() => getInitialFormation('CASCADE'));
   
-  // Multi-Timeframe Controls: by default only the active timeframe is enabled
-  const [selectedTfs, setSelectedTfs] = useState<string[]>([timeframe.toLowerCase()]);
-  const [minStrength, setMinStrength] = useState<number>(50);
-  const [onlyConfirmedOi, setOnlyConfirmedOi] = useState<boolean>(false);
+  // Multi-Timeframe Controls: by default initialized from storage or active timeframe
+  const [selectedTfs, setSelectedTfs] = useState<string[]>(() => {
+    const initTf = getInitialTimeframe('1D');
+    return getInitialSelectedTfs(initTf.toLowerCase());
+  });
+  const [minStrength, setMinStrength] = useState<number>(() => getInitialMinStrength(50));
+  const [onlyConfirmedOi, setOnlyConfirmedOi] = useState<boolean>(() => getInitialConfirmedOi(false));
   const [targetSignal, setTargetSignal] = useState<{ time: number; token: number } | null>(null);
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
@@ -48,10 +66,32 @@ export function App() {
   const reconnectTimeoutRef = useRef<any>(null);
   const selectedCoinRef = useRef(selectedCoin);
   const timeframeRef = useRef(timeframe);
+  const activeFormationRef = useRef(activeFormation);
   const prevSubRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
 
   selectedCoinRef.current = selectedCoin;
   timeframeRef.current = timeframe;
+  activeFormationRef.current = activeFormation;
+
+  // Synchronize state changes to localStorage and URL parameters
+  useEffect(() => {
+    saveSelectedCoin(selectedCoin);
+    saveSelectedTimeframe(timeframe);
+    saveActiveFormation(activeFormation);
+    syncUrlState({ coin: selectedCoin, timeframe, formation: activeFormation });
+  }, [selectedCoin, timeframe, activeFormation]);
+
+  useEffect(() => {
+    saveSelectedTfs(selectedTfs);
+  }, [selectedTfs]);
+
+  useEffect(() => {
+    saveMinStrength(minStrength);
+  }, [minStrength]);
+
+  useEffect(() => {
+    saveConfirmedOi(onlyConfirmedOi);
+  }, [onlyConfirmedOi]);
 
   // 1. Fetch Coins List on mount
   useEffect(() => {
@@ -256,6 +296,30 @@ export function App() {
     }
     setSelectedCoin(cleanCoin);
   }, []);
+
+  // Listen to browser Back/Forward (popstate) navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlCoin = getInitialCoin(selectedCoinRef.current);
+      const urlTf = getInitialTimeframe(timeframeRef.current);
+      const urlFormation = getInitialFormation(activeFormationRef.current);
+
+      if (urlCoin.toUpperCase() !== selectedCoinRef.current.toUpperCase()) {
+        handleSelectCoin(urlCoin);
+      }
+      if (urlTf !== timeframeRef.current) {
+        setTimeframe(urlTf);
+      }
+      if (urlFormation !== activeFormationRef.current) {
+        setActiveFormation(urlFormation);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [handleSelectCoin]);
 
   const mapCategoryToFormation = (cat?: string): FormationFilter | null => {
     if (!cat) return null;

@@ -357,7 +357,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                 }`}
                 title="Funding Rate (ставка фінансування)"
               >
-                FR: {(fundingRate * 100).toFixed(4)}%
+                Фінансування: {(fundingRate * 100).toFixed(4)}%
               </span>
             )}
           </div>
@@ -546,7 +546,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                   className="p-2.5 rounded-lg bg-white dark:bg-[#14181f] border border-slate-200/90 dark:border-[#222731] hover:border-indigo-400 dark:hover:border-indigo-500 cursor-pointer transition shadow-2xs space-y-1.5"
                 >
                   {/* Formation Header: Title + Direction Badge */}
-                  <div className="flex items-start justify-between gap-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <span className="text-slate-900 dark:text-gray-100 font-semibold text-xs leading-snug">
                       {sig.title}
                     </span>
@@ -575,9 +575,57 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                             x3+ Підтверджена
                           </span>
                         )}
-                        {(sig.signal_type || sig.signalType) && (
+                        {(sig.signal_type || sig.signalType) ? (
                           <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30">
                             {(sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE') ? 'ВІДСКОК' : 'АКТИВНА'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
+                              sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
+                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                                : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                : sig.interaction_state === 'COMPRESSION' || sig.interactionState === 'COMPRESSION'
+                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                                : sig.interaction_state === 'TESTING' || sig.interactionState === 'TESTING'
+                                ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'
+                                : sig.interaction_state === 'REJECTED' || sig.interactionState === 'REJECTED'
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                            }`}
+                          >
+                            {(() => {
+                              const state = sig.interaction_state || sig.interactionState || 'ACTIVE';
+                              const stateMap: Record<string, string> = {
+                                BREAKOUT: 'ПРОБІЙ',
+                                RETEST: 'РЕТЕСТ',
+                                COMPRESSION: 'СТИCНЕННЯ',
+                                TESTING: 'ТЕСТ',
+                                REJECTED: 'ВІДХИЛЕНО',
+                                APPROACHING: 'НАБЛИЖЕННЯ',
+                                STALE: 'ЗАСТАРІЛА',
+                                ACTIVE: 'АКТИВНА',
+                              };
+                              return stateMap[state] || state;
+                            })()}
+                          </span>
+                        )}
+                        {(sig.htf_context || sig.htfContext) && (sig.htf_context !== 'UNAVAILABLE' && sig.htfContext !== 'UNAVAILABLE') && (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
+                              (sig.htf_context === 'AGAINST_HTF' || sig.htfContext === 'AGAINST_HTF')
+                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                                : (sig.htf_context === 'ALIGNED' || sig.htfContext === 'ALIGNED')
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                            }`}
+                          >
+                            {(sig.htf_context === 'AGAINST_HTF' || sig.htfContext === 'AGAINST_HTF')
+                              ? '⚠️ ПРОТИ HTF'
+                              : (sig.htf_context === 'ALIGNED' || sig.htfContext === 'ALIGNED')
+                              ? 'HTF: ЗБІГ'
+                              : 'HTF: НЕЙТР.'}
                           </span>
                         )}
                       </>
@@ -595,7 +643,86 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                         Дисбаланс FVG
                       </span>
                     )}
+
+                    {/* Phase 5.2: Structural Context Tier / Warning Badges */}
+                    {(() => {
+                      const ctx = sig.structuralContext || sig.structural_context;
+                      if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
+                      const isTier1 = ctx.structuralTier === 'TIER_1_CONFLUENT' || ctx.structural_tier === 'TIER_1_CONFLUENT' || ctx.hasSupportConfluence || ctx.has_support_confluence;
+                      const flags = ctx.riskFlags || ctx.risk_flags || [];
+                      const isAgainstHtf = flags.includes('AGAINST_HTF') || ctx.htfAlignment === 'AGAINST_HTF' || ctx.htf_alignment === 'AGAINST_HTF';
+                      const isComp = flags.includes('COMPRESSION') || ctx.isCompression || ctx.is_compression;
+
+                      return (
+                        <>
+                          {isTier1 && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30 whitespace-nowrap flex-shrink-0">
+                              🛡️ Збіг
+                            </span>
+                          )}
+                          {isAgainstHtf && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-500/20 text-[#f6465d] border border-rose-500/30 whitespace-nowrap flex-shrink-0">
+                              ⚠️ Проти HTF
+                            </span>
+                          )}
+                          {isComp && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30 whitespace-nowrap flex-shrink-0">
+                              ⚡ Стиснення
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
+
+                  {sig.category === 'sweep' && sig.oiDeltaPct !== undefined && sig.oiDeltaPct !== null && (
+                    <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded">
+                      <span className="text-slate-400 dark:text-gray-500">Зміна Open Interest:</span>
+                      <span className={`font-bold ${sig.oiDeltaPct < 0 ? 'text-[#0ecb81]' : sig.oiDeltaPct > 0 ? 'text-[#f6465d]' : 'text-slate-400'}`}>
+                        {formatOiDeltaPct(sig.oiDeltaPct)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Phase 5.2: Enriched Structural Context row for Non-Trendline Signals */}
+                  {sig.category !== 'trendline' && (() => {
+                    const ctx = sig.structuralContext || sig.structural_context;
+                    if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
+                    const hasSup = ctx.hasSupportConfluence || ctx.has_support_confluence;
+                    const supDist = ctx.distanceToSupportAtr ?? ctx.distance_to_support_atr;
+                    const resDist = ctx.distanceToResistanceAtr ?? ctx.distance_to_resistance_atr;
+                    const supQ = ctx.confluentLineQ ?? ctx.confluent_line_q ?? ctx.nearestSupportQ ?? ctx.nearest_support_q;
+                    const htf = ctx.htfAlignment ?? ctx.htf_alignment;
+
+                    if ((supDist === null || supDist === undefined) && (resDist === null || resDist === undefined) && (!htf || htf === 'UNAVAILABLE')) {
+                      return null;
+                    }
+
+                    return (
+                      <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-slate-500 dark:text-gray-400">
+                        <div className="flex items-center gap-1.5 truncate">
+                          {hasSup ? (
+                            <span className="text-[#0ecb81] font-semibold">
+                              Підтримка Q:{Math.round(supQ ?? 80)} ({supDist !== null && supDist !== undefined ? supDist.toFixed(1) : '0.0'} ATR)
+                            </span>
+                          ) : supDist !== null && supDist !== undefined ? (
+                            <span>Підтримка: {supDist.toFixed(1)} ATR</span>
+                          ) : null}
+                          {resDist !== null && resDist !== undefined && (
+                            <span>Опір: {resDist.toFixed(1)} ATR</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {htf === 'ALIGNED' && (
+                            <span className="text-[#0ecb81] text-[9px] font-bold">1h Збіг</span>
+                          )}
+                          {htf === 'AGAINST_HTF' && (
+                            <span className="text-[#f6465d] text-[9px] font-bold">Проти 1h</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Formation Details / Description */}
                   {sig.desc && (
