@@ -24,14 +24,22 @@ def _calculate_atr(candles: List[Dict[str, Any]], period: int = 14) -> float:
 
 def _round_price(price: float) -> float:
     """Rounds price sensibly depending on magnitude."""
-    if price >= 1000:
+    if price >= 10000:
         return round(price, 1)
-    elif price >= 1:
+    elif price >= 1000:
         return round(price, 2)
-    elif price >= 0.01:
+    elif price >= 100:
+        return round(price, 2)
+    elif price >= 10:
+        return round(price, 3)
+    elif price >= 1:
         return round(price, 4)
-    else:
+    elif price >= 0.1:
+        return round(price, 5)
+    elif price >= 0.01:
         return round(price, 6)
+    else:
+        return round(price, 8)
 
 
 def generate_trade_setup(
@@ -868,17 +876,20 @@ def _build_summary_narrative(
     reward_pct: float,
     factors: List[Dict[str, Any]],
 ) -> str:
-    """Creates a concise, realistic Ukrainian text summary."""
+    """Creates a concise, insightful analytical summary in Ukrainian without repeating raw numbers."""
     dir_ukr = "ЛОНГ (LONG)" if direction == "LONG" else "ШОРТ (SHORT)"
-    factors_text = ", ".join([f["title"] for f in factors[:3]]) if factors else "Технічний аналіз формацій"
-    
-    return (
-        f"Рекомендовано позицію {dir_ukr} по {coin}. "
-        f"Фактори: {factors_text}. "
-        f"Вхід: {entry_price} (діапазон {entry_range[0]} - {entry_range[1]}). "
-        f"SL: {sl_price} (-{risk_pct}%), TP: {tp_price} (+{reward_pct}%). "
-        f"Risk/Reward: 1:{rr_val:.1f} (вимогу ≥ 1:3 виконано)."
-    )
+    clean_titles = []
+    for f in factors[:2]:
+        t = f.get("title", "")
+        for prefix in ("Опора на ", "Реакція на ", "Тест "):
+            if t.startswith(prefix):
+                t = t[len(prefix):]
+        clean_titles.append(t)
+    factors_text = ", ".join(clean_titles) if clean_titles else "технічний конфлюенс"
+    if direction == "LONG":
+        return f"Сетап {dir_ukr}: опора на {factors_text}. Локальний стоп надійно захищено структурою, а запас ходу до опору забезпечує співвідношення 1:{rr_val:.1f}."
+    else:
+        return f"Сетап {dir_ukr}: реакція на {factors_text}. Стоп виставлено за локальним хаєм, а потенціал зниження до підтримки забезпечує співвідношення 1:{rr_val:.1f}."
 
 
 def _make_empty_setup(coin: str, interval: str, reason: str) -> Dict[str, Any]:

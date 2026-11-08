@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScreenerItem, CoinMeta, formatOiDeltaPct } from '../types';
+import { ScreenerItem, CoinMeta, formatOiDeltaPct, formatPrice } from '../types';
 import { X, Search, Layers, Activity } from 'lucide-react';
 
 interface ScreenerModalProps {
@@ -147,7 +147,7 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                         )}
                       </div>
                       <span className="text-xs font-semibold text-slate-700 dark:text-gray-300">
-                        ${item.currentPrice < 1 ? item.currentPrice.toFixed(4) : item.currentPrice.toFixed(2)}
+                        ${formatPrice(item.currentPrice)}
                       </span>
                     </div>
 
@@ -229,7 +229,7 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                   </div>
                   <div className="text-right">
                     <div className="text-xs font-semibold text-slate-700 dark:text-gray-200">
-                      ${c.markPrice < 1 ? c.markPrice.toFixed(4) : c.markPrice.toFixed(2)}
+                      ${formatPrice(c.markPrice)}
                     </div>
                     <div className={`text-[10px] font-sans ${c.change24h >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                       {c.change24h >= 0 ? `+${c.change24h}%` : `${c.change24h}%`}

@@ -5,6 +5,8 @@ export const chartSpies = {
   updateCalls: [] as any[],
   setVisibleLogicalRangeCalls: [] as any[],
   unsubscribeCalls: 0,
+  seriesApplyOptionsCalls: [] as any[],
+  addCandlestickSeriesCalls: [] as any[],
 };
 
 export function resetSpies() {
@@ -14,6 +16,8 @@ export function resetSpies() {
   chartSpies.updateCalls = [];
   chartSpies.setVisibleLogicalRangeCalls = [];
   chartSpies.unsubscribeCalls = 0;
+  chartSpies.seriesApplyOptionsCalls = [];
+  chartSpies.addCandlestickSeriesCalls = [];
 }
 
 export const LineStyle = {
@@ -37,6 +41,9 @@ export const mockCandleSeries = {
   update: (bar: any) => {
     chartSpies.updateCalls.push(bar);
   },
+  applyOptions: (opts: any) => {
+    chartSpies.seriesApplyOptionsCalls.push(opts);
+  },
   setMarkers: () => {},
   createPriceLine: () => ({ applyOptions: () => {} }),
   removePriceLine: () => {},
@@ -57,7 +64,10 @@ export const mockTimeScale = {
 
 export const mockChartApi = {
   timeScale: () => mockTimeScale,
-  addCandlestickSeries: () => mockCandleSeries,
+  addCandlestickSeries: (opts?: any) => {
+    chartSpies.addCandlestickSeriesCalls.push(opts);
+    return mockCandleSeries;
+  },
   applyOptions: () => {},
   remove: () => {
     chartSpies.removeCalls++;

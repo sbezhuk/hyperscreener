@@ -1113,7 +1113,7 @@ def calculate_linear_regression_channel(
     else:
         direction = "FLAT"
 
-    price_precision = 2 if curr_price >= 1.0 else (4 if curr_price >= 0.01 else 6)
+    price_precision = 2 if curr_price >= 100.0 else (3 if curr_price >= 10.0 else (4 if curr_price >= 1.0 else (5 if curr_price >= 0.1 else 6)))
     slope_precision = price_precision + 2
 
     return {

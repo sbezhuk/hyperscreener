@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, IChartApi, ISeriesApi, LineStyle, SeriesMarker, CrosshairMode } from 'lightweight-charts';
-import { Candle, LevelItem, FVGItem, SignalItem, FormationFilter, AnalysisData } from '../types';
+import { Candle, LevelItem, FVGItem, SignalItem, FormationFilter, AnalysisData, getAssetPricePrecision } from '../types';
 import { ZonesPrimitive } from './ZonesPrimitive';
 import { useTheme } from '../context/ThemeContext';
 
@@ -53,12 +53,16 @@ export const Chart: React.FC<ChartProps> = ({
 
   const prevContextRef = useRef<{ coin: string; interval: string }>({ coin: '', interval: '' });
   const prevNavTokenRef = useRef<number | null>(null);
+  const currentPrecisionRef = useRef<{ precision: number; minMove: number }>({ precision: 2, minMove: 0.01 });
   // Track user interaction (drag / scroll) so pagination only triggers on deliberate scrolling into the past
   const userHasScrolledHistoryRef = useRef<boolean>(false);
 
   // 1. Initialize Chart & Attach ZonesPrimitive directly to Candle Series
   useEffect(() => {
     if (!chartContainerRef.current) return;
+
+    const initialPrecision = getAssetPricePrecision(candles);
+    currentPrecisionRef.current = initialPrecision;
 
     const chart = createChart(chartContainerRef.current, {
       autoSize: true,
@@ -109,6 +113,11 @@ export const Chart: React.FC<ChartProps> = ({
       borderVisible: false,
       wickUpColor: '#0ecb81',
       wickDownColor: '#f6465d',
+      priceFormat: {
+        type: 'price',
+        precision: initialPrecision.precision,
+        minMove: initialPrecision.minMove,
+      },
     });
 
     const zonesPrimitive = new ZonesPrimitive();
@@ -223,6 +232,23 @@ export const Chart: React.FC<ChartProps> = ({
     }));
 
     if (mappedCandles.length === 0) return;
+
+    // Ensure series price precision matches the coin magnitude and candle decimals
+    const priceFormatOpts = getAssetPricePrecision(mappedCandles);
+    if (
+      isSeriesChanged ||
+      priceFormatOpts.precision !== currentPrecisionRef.current.precision ||
+      priceFormatOpts.minMove !== currentPrecisionRef.current.minMove
+    ) {
+      currentPrecisionRef.current = priceFormatOpts;
+      candleSeriesRef.current.applyOptions({
+        priceFormat: {
+          type: 'price',
+          precision: priceFormatOpts.precision,
+          minMove: priceFormatOpts.minMove,
+        },
+      });
+    }
 
     const firstCandleTime = Number(mappedCandles[0].time);
     const lastCandleTime = Number(mappedCandles[mappedCandles.length - 1].time);

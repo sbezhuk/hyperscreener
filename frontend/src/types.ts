@@ -565,3 +565,76 @@ export function formatOiDeltaPct(pct: number | null | undefined): string {
   }
   return pct > 0 ? `+${formatted}%` : `${formatted}%`;
 }
+
+/**
+ * Calculates optimal price precision and minMove step for Lightweight Charts
+ * based on price magnitude and actual candle decimal places.
+ */
+export function getAssetPricePrecision(
+  candles?: { open: number; high: number; low: number; close: number }[] | null,
+  currentPrice?: number
+): { precision: number; minMove: number } {
+  let samplePrice = currentPrice && currentPrice > 0 ? currentPrice : 0;
+  let maxDecimalsFromData = 0;
+
+  if (candles && candles.length > 0) {
+    const sample = candles.slice(-50);
+    if (!samplePrice) {
+      samplePrice = sample[sample.length - 1]?.close || 0;
+    }
+    for (const c of sample) {
+      for (const val of [c.close, c.open, c.high, c.low]) {
+        if (typeof val === 'number' && !isNaN(val) && val > 0) {
+          const s = Number(val.toPrecision(12)).toString();
+          const dot = s.indexOf('.');
+          if (dot !== -1) {
+            const dec = s.length - dot - 1;
+            if (dec > maxDecimalsFromData && dec <= 8) {
+              maxDecimalsFromData = dec;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Baseline precision based on price magnitude
+  let baselinePrecision = 2;
+  if (samplePrice >= 10000) baselinePrecision = 1;
+  else if (samplePrice >= 1000) baselinePrecision = 2;
+  else if (samplePrice >= 100) baselinePrecision = 2;
+  else if (samplePrice >= 10) baselinePrecision = 3;
+  else if (samplePrice >= 1) baselinePrecision = 4;
+  else if (samplePrice >= 0.1) baselinePrecision = 5;
+  else if (samplePrice >= 0.01) baselinePrecision = 6;
+  else if (samplePrice >= 0.001) baselinePrecision = 7;
+  else if (samplePrice > 0) baselinePrecision = 8;
+
+  const precision = Math.min(8, Math.max(baselinePrecision, maxDecimalsFromData));
+  const minMove = Number(Math.pow(10, -precision).toFixed(precision));
+
+  return { precision, minMove };
+}
+
+/**
+ * Formats asset price with precision tailored to asset magnitude.
+ * Avoids truncating significant decimals for coins like $1.3412 or $0.00365.
+ */
+export function formatPrice(price: number | null | undefined, maxDecimals?: number): string {
+  if (price === null || price === undefined || Number.isNaN(price) || price <= 0) {
+    return '---';
+  }
+  if (maxDecimals !== undefined) {
+    return price.toFixed(maxDecimals);
+  }
+  if (price >= 10000) return price.toFixed(1);
+  if (price >= 1000) return price.toFixed(2);
+  if (price >= 100) return price.toFixed(2);
+  if (price >= 10) return price.toFixed(3);
+  if (price >= 1) return price.toFixed(4);
+  if (price >= 0.1) return price.toFixed(5);
+  if (price >= 0.01) return price.toFixed(6);
+  if (price >= 0.001) return price.toFixed(6);
+  return price.toFixed(8);
+}
+

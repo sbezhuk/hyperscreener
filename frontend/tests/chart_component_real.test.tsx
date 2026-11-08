@@ -306,6 +306,28 @@ describe('Chart.tsx Real Component Lifecycle & Rendering Tests', () => {
 
     unmount();
   });
+
+  test('7. Dynamic price format precision for $1.34 tier assets', async () => {
+    // Candles around $1.34 with 4 decimals
+    const candles134 = [
+      { time: 1700000000, open: 1.3412, high: 1.3520, low: 1.3390, close: 1.3425 },
+      { time: 1700086400, open: 1.3425, high: 1.3480, low: 1.3400, close: 1.3418 },
+    ];
+
+    const { unmount } = renderChart({
+      coin: 'SUI',
+      interval: '15m',
+      candles: candles134,
+    });
+
+    // Check that addCandlestickSeries was called with priceFormat precision 4 and minMove 0.0001
+    const addSeriesCall = chartSpies.addCandlestickSeriesCalls[0];
+    assert.ok(addSeriesCall, 'addCandlestickSeries was called');
+    assert.strictEqual(addSeriesCall.priceFormat?.precision, 4, 'Series must have precision: 4 for $1.34 asset');
+    assert.strictEqual(addSeriesCall.priceFormat?.minMove, 0.0001, 'Series must have minMove: 0.0001 for $1.34 asset');
+
+    unmount();
+  });
 });
 
 describe('SidebarLevels.tsx Trendline Structural Context Tests (Phase 5.2)', () => {

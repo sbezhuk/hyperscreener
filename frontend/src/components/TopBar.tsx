@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timeframe, ConnectionState, WSConnectionDetails, OIData, formatOiDeltaPct } from '../types';
+import { Timeframe, ConnectionState, WSConnectionDetails, OIData, formatOiDeltaPct, formatPrice } from '../types';
 import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw, TrendingUp, TrendingDown, Minus, SlidersHorizontal } from 'lucide-react';
 import { useTheme, ThemePreference } from '../context/ThemeContext';
 
@@ -151,7 +151,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
             {/* Current Price */}
             <div className="font-mono text-base sm:text-xl font-bold text-[#0ecb81] tracking-tight leading-none flex-shrink-0">
-              {price > 0 ? (price < 1 ? price.toFixed(5) : price < 50 ? price.toFixed(3) : price.toFixed(2)) : '---'}
+              {formatPrice(price)}
             </div>
           </div>
 

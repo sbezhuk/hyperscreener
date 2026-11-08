@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData, formatOiDeltaPct, PivotPointsData, TradeSetup } from '../types';
-import { Activity, BarChart2, X, TrendingUp, TrendingDown, Target, Shield, CheckCircle2, AlertCircle, Compass, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, BarChart2, X, TrendingUp, TrendingDown, Target, Shield, CheckCircle2, AlertCircle, Compass, ChevronDown, ChevronUp, Copy, Check, Sparkles } from 'lucide-react';
 
 interface SidebarLevelsProps {
   resistances: LevelItem[];
@@ -50,6 +50,20 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
 
   const allLevelsCount = resistances.length + supports.length;
   const [isDetailsOpen, setIsDetailsOpen] = useState(true);
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopySetup = () => {
+    if (!tradeSetup || tradeSetup.entry_price === null) return;
+    const text = `${tradeSetup.coin} [${tradeSetup.direction}]
+Вхід: $${tradeSetup.entry_price} (${tradeSetup.entry_range ? `${tradeSetup.entry_range[0]} - ${tradeSetup.entry_range[1]}` : 'маркет'})
+Stop Loss: $${tradeSetup.stop_loss} (-${tradeSetup.risk_pct}%)
+Take Profit: $${tradeSetup.take_profit} (+${tradeSetup.reward_pct}%)
+Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
+Тригер: ${tradeSetup.primary_trigger || 'Конфлюенс формацій'}`;
+    navigator.clipboard.writeText(text);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   return (
     <aside className="w-full h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors overflow-hidden">
@@ -77,29 +91,24 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
           <div className="p-3 bg-gradient-to-b from-slate-50 to-white dark:from-[#13171d] dark:to-[#0e1114]">
             {/* Header row */}
             <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-500 dark:text-gray-400 font-semibold flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
-                <Compass className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                ТОРГОВИЙ СИГНАЛ · ПІДСУМОК
+              <span className="text-slate-500 dark:text-gray-400 font-semibold flex items-center gap-1.5 uppercase text-[11px] tracking-wider whitespace-nowrap">
+                <Compass className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+                ТОРГОВИЙ СИГНАЛ
               </span>
-              <div className="flex items-center gap-1">
-                {tradeSetup.risk_reward && tradeSetup.risk_reward >= 3.0 && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-[#0ecb81] border border-emerald-500/30">
-                    RR 1:{tradeSetup.risk_reward.toFixed(1)} ✓
-                  </span>
-                )}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
                     tradeSetup.confluence_score >= 70
                       ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30'
                       : 'bg-slate-200 dark:bg-[#1f242d] text-slate-600 dark:text-gray-400'
                   }`}
                   title="Оцінка конфлюенсу формацій"
                 >
-                  ЗБІГ {tradeSetup.confluence_score}/100
+                  ЗБІГ {tradeSetup.confluence_score}%
                 </span>
                 <button
                   onClick={() => setIsDetailsOpen(!isDetailsOpen)}
-                  className="p-0.5 ml-0.5 rounded hover:bg-slate-200 dark:hover:bg-[#1f242d] text-slate-400 hover:text-slate-600 dark:hover:text-gray-200 transition"
+                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-[#1f242d] text-slate-400 hover:text-slate-600 dark:hover:text-gray-200 transition"
                   title={isDetailsOpen ? "Згорнути деталі" : "Розгорнути деталі"}
                 >
                   {isDetailsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -107,151 +116,210 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
               </div>
             </div>
 
-          {/* Main Action Banner */}
-          <div
-            className={`p-2.5 rounded-lg border flex flex-col gap-2 transition-all ${
-              tradeSetup.direction === 'LONG'
-                ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-500/40'
-                : tradeSetup.direction === 'SHORT'
-                ? 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-300 dark:border-rose-500/40'
-                : 'bg-slate-100/70 dark:bg-[#161a20] border-slate-300 dark:border-[#262c36]'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {tradeSetup.direction === 'LONG' ? (
-                  <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-[#0ecb81]" />
-                ) : tradeSetup.direction === 'SHORT' ? (
-                  <TrendingDown className="w-5 h-5 text-rose-600 dark:text-[#f6465d]" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-amber-500" />
-                )}
-                <div>
-                  <div
-                    className={`font-black text-xs sm:text-sm tracking-wide ${
+            {/* Main Action Banner */}
+            <div
+              className={`p-2.5 rounded-lg border transition-all ${
+                tradeSetup.direction === 'LONG'
+                  ? 'bg-emerald-500/[0.04] dark:bg-emerald-950/20 border-emerald-300/80 dark:border-emerald-500/30 shadow-xs'
+                  : tradeSetup.direction === 'SHORT'
+                  ? 'bg-rose-500/[0.04] dark:bg-rose-950/20 border-rose-300/80 dark:border-rose-500/30 shadow-xs'
+                  : 'bg-slate-50 dark:bg-[#14181f] border-slate-200 dark:border-[#222832]'
+              }`}
+            >
+              {/* Status Header: Row 1 = Direction Badge + RR Badge; Row 2 = Full Trigger Description */}
+              <div className="pb-2 border-b border-slate-200/60 dark:border-[#202632] space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-xs font-black tracking-wider uppercase flex items-center gap-1.5 flex-shrink-0 ${
                       tradeSetup.direction === 'LONG'
-                        ? 'text-emerald-700 dark:text-[#0ecb81]'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-[#0ecb81] border border-emerald-500/30'
                         : tradeSetup.direction === 'SHORT'
-                        ? 'text-rose-700 dark:text-[#f6465d]'
-                        : 'text-slate-700 dark:text-gray-300'
+                        ? 'bg-rose-500/15 text-rose-700 dark:text-[#f6465d] border border-rose-500/30'
+                        : 'bg-slate-200 dark:bg-[#1e2329] text-slate-600 dark:text-gray-400'
                     }`}
                   >
-                    {tradeSetup.recommendation_title}
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-gray-400">
+                    {tradeSetup.direction === 'LONG' ? (
+                      <TrendingUp className="w-3.5 h-3.5 flex-shrink-0" />
+                    ) : tradeSetup.direction === 'SHORT' ? (
+                      <TrendingDown className="w-3.5 h-3.5 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                    )}
+                    {tradeSetup.direction === 'LONG' ? 'LONG' : tradeSetup.direction === 'SHORT' ? 'SHORT' : 'WAIT'}
+                  </span>
+
+                  {tradeSetup.risk_reward && (
+                    <div className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
+                      <span className="text-[10px] text-slate-400 font-mono font-medium">RR</span>
+                      <span className="text-xs font-mono font-black text-emerald-600 dark:text-[#0ecb81] bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30 whitespace-nowrap">
+                        1 : {tradeSetup.risk_reward.toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {(tradeSetup.primary_trigger || tradeSetup.status_label) && (
+                  <div className="text-[11px] font-medium text-slate-700 dark:text-gray-300 leading-snug">
                     {tradeSetup.primary_trigger || tradeSetup.status_label}
                   </div>
-                </div>
+                )}
               </div>
 
-              {tradeSetup.risk_reward && (
-                <div className="text-right">
-                  <div className="text-[10px] text-slate-400 uppercase font-sans">Співвідношення</div>
-                  <div className="text-xs font-mono font-black text-emerald-600 dark:text-[#0ecb81]">
-                    1 : {tradeSetup.risk_reward.toFixed(1)}
+              {/* Active Setup Body */}
+              {tradeSetup.entry_price !== null && tradeSetup.stop_loss !== null && tradeSetup.take_profit !== null ? (
+                <div className="pt-2 space-y-2">
+                  {/* Risk vs Reward Proportion Visual Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[9px] font-mono">
+                      <span className="text-rose-500 font-semibold whitespace-nowrap">РИЗИК 1.0R ({tradeSetup.risk_pct}%)</span>
+                      <span className="text-[#0ecb81] font-bold whitespace-nowrap">ТЕЙК {tradeSetup.risk_reward?.toFixed(1)}R (+{tradeSetup.reward_pct}%)</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full overflow-hidden flex bg-slate-200 dark:bg-[#1a1f26]">
+                      <div 
+                        style={{ width: `${Math.max(12, Math.min(28, (1 / (1 + (tradeSetup.risk_reward || 3))) * 100))}%` }} 
+                        className="bg-rose-500 h-full"
+                        title={`Ризик: ${tradeSetup.risk_pct}%`}
+                      />
+                      <div 
+                        style={{ width: `${100 - Math.max(12, Math.min(28, (1 / (1 + (tradeSetup.risk_reward || 3))) * 100))}%` }} 
+                        className="bg-emerald-500 h-full"
+                        title={`Потенціал: +${tradeSetup.reward_pct}% (1:${tradeSetup.risk_reward?.toFixed(1)})`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Primary Entry Card with full range */}
+                  <div className="bg-white dark:bg-[#101419] p-2 rounded-lg border border-slate-200/90 dark:border-[#222832] flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold flex-shrink-0">
+                        <Target className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[9px] text-slate-400 dark:text-gray-500 uppercase font-bold tracking-wider block whitespace-nowrap">
+                          Вхід (Entry)
+                        </span>
+                        <span className="text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white truncate block">
+                          ${tradeSetup.entry_price}
+                        </span>
+                      </div>
+                    </div>
+                    {tradeSetup.entry_range && (
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-[9px] text-slate-400 dark:text-gray-500 uppercase block whitespace-nowrap">Діапазон</span>
+                        <span className="text-[10px] font-mono font-medium text-slate-700 dark:text-gray-300 bg-slate-100 dark:bg-[#181d24] px-1.5 py-0.5 rounded border border-slate-200 dark:border-[#252b36] whitespace-nowrap inline-block">
+                          {tradeSetup.entry_range[0]} — {tradeSetup.entry_range[1]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SL and TP 2-Columns Grid */}
+                  <div className="grid grid-cols-2 gap-1.5 font-mono">
+                    {/* Stop Loss Card */}
+                    <div className="bg-white dark:bg-[#101419] p-2 rounded-lg border border-rose-200/80 dark:border-rose-900/40 flex flex-col justify-between overflow-hidden">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] text-rose-500 font-sans font-bold flex items-center gap-1 whitespace-nowrap">
+                          <Shield className="w-3 h-3 text-rose-500 flex-shrink-0" /> СТОП (SL)
+                        </span>
+                        <span className="text-[9px] px-1 py-0.2 rounded font-bold bg-rose-500/15 text-[#f6465d] whitespace-nowrap">
+                          -{tradeSetup.risk_pct}%
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-[#f6465d] mt-1 truncate" title={`$${tradeSetup.stop_loss}`}>
+                        ${tradeSetup.stop_loss}
+                      </div>
+                    </div>
+
+                    {/* Take Profit Card */}
+                    <div className="bg-white dark:bg-[#101419] p-2 rounded-lg border border-emerald-200/80 dark:border-emerald-900/40 flex flex-col justify-between overflow-hidden">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] text-emerald-500 font-sans font-bold flex items-center gap-1 whitespace-nowrap">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" /> ТЕЙК (TP)
+                        </span>
+                        <span className="text-[9px] px-1 py-0.2 rounded font-bold bg-emerald-500/15 text-[#0ecb81] whitespace-nowrap">
+                          +{tradeSetup.reward_pct}%
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-[#0ecb81] mt-1 truncate" title={`$${tradeSetup.take_profit}`}>
+                        ${tradeSetup.take_profit}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Confluence Badges - Clean Pills */}
+                  {isDetailsOpen && tradeSetup.confluence_factors && tradeSetup.confluence_factors.length > 0 && (
+                    <div className="space-y-1 pt-0.5">
+                      <div className="text-[10px] text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
+                        <span>Підтверджено формаціями:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {tradeSetup.confluence_factors.map((f, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded-full text-[9px] bg-white dark:bg-[#161a20] text-slate-700 dark:text-gray-300 border border-slate-200 dark:border-[#232832] flex items-center gap-1 shadow-2xs"
+                            title={f.desc}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {f.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Narrative Insight */}
+                  {isDetailsOpen && tradeSetup.summary_comment && (
+                    <div className="text-[10px] text-slate-600 dark:text-gray-300 leading-relaxed bg-white/70 dark:bg-[#11151b] p-2 rounded-lg border border-slate-200/70 dark:border-[#1e242d]">
+                      💡 <span className="font-normal">{tradeSetup.summary_comment}</span>
+                    </div>
+                  )}
+
+                  {/* Quick Copy Button */}
+                  <button
+                    onClick={handleCopySetup}
+                    className={`w-full py-1.5 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      isCopied
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'bg-white dark:bg-[#161a20] text-slate-700 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#262c37] hover:bg-slate-50 dark:hover:bg-[#1a2028]'
+                    }`}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        <span>Параметри скопійовано!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-slate-400" />
+                        <span>Скопіювати параметри угоди</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                /* When in WAIT mode */
+                <div className="pt-2 text-[11px] text-slate-600 dark:text-gray-400 leading-snug space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Потенціал Long:</span>
+                    <span className={tradeSetup.long_potential?.rr && tradeSetup.long_potential.rr >= 3.0 ? 'text-[#0ecb81] font-bold' : 'text-slate-400'}>
+                      {tradeSetup.long_potential?.rr ? `RR 1:${tradeSetup.long_potential.rr.toFixed(1)}` : 'Немає запасу'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Потенціал Short:</span>
+                    <span className={tradeSetup.short_potential?.rr && tradeSetup.short_potential.rr >= 3.0 ? 'text-[#f6465d] font-bold' : 'text-slate-400'}>
+                      {tradeSetup.short_potential?.rr ? `RR 1:${tradeSetup.short_potential.rr.toFixed(1)}` : 'Немає запасу'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-gray-400 italic bg-white/50 dark:bg-[#101419] p-1.5 rounded border border-slate-200/60 dark:border-[#1e2329]">
+                    {tradeSetup.summary_comment}
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Entry, SL, TP Grid if setup is active */}
-            {tradeSetup.entry_price !== null && tradeSetup.stop_loss !== null && tradeSetup.take_profit !== null ? (
-              <div className="pt-2 border-t border-slate-200/80 dark:border-[#222832] space-y-2">
-                <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
-                  {/* Entry Card */}
-                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-slate-200 dark:border-[#242b36] flex flex-col">
-                    <span className="text-[9px] text-slate-400 dark:text-gray-500 font-sans flex items-center gap-1">
-                      <Target className="w-2.5 h-2.5 text-blue-500" /> ВХІД
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-white mt-0.5 truncate">
-                      ${tradeSetup.entry_price}
-                    </span>
-                    {tradeSetup.entry_range && (
-                      <span className="text-[9px] text-slate-400 truncate mt-0.5" title="Рекомендований діапазон входу">
-                        {tradeSetup.entry_range[0]} - {tradeSetup.entry_range[1]}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Stop Loss Card */}
-                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-rose-200 dark:border-rose-950/60 flex flex-col">
-                    <span className="text-[9px] text-rose-500 font-sans flex items-center gap-1">
-                      <Shield className="w-2.5 h-2.5 text-rose-500" /> СТОП (SL)
-                    </span>
-                    <span className="font-bold text-[#f6465d] mt-0.5 truncate">
-                      ${tradeSetup.stop_loss}
-                    </span>
-                    <span className="text-[9px] text-rose-500/80 font-bold mt-0.5">
-                      -{tradeSetup.risk_pct}%
-                    </span>
-                  </div>
-
-                  {/* Take Profit Card */}
-                  <div className="bg-white dark:bg-[#101419] p-1.5 rounded border border-emerald-200 dark:border-emerald-950/60 flex flex-col">
-                    <span className="text-[9px] text-emerald-500 font-sans flex items-center gap-1">
-                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" /> ТЕЙК (TP)
-                    </span>
-                    <span className="font-bold text-[#0ecb81] mt-0.5 truncate">
-                      ${tradeSetup.take_profit}
-                    </span>
-                    <span className="text-[9px] text-emerald-500 font-bold mt-0.5">
-                      +{tradeSetup.reward_pct}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Confluence Factors list (collapsible with isDetailsOpen) */}
-                {isDetailsOpen && tradeSetup.confluence_factors && tradeSetup.confluence_factors.length > 0 && (
-                  <div className="bg-white/60 dark:bg-[#101419]/60 p-1.5 rounded border border-slate-200/60 dark:border-[#1e242d] space-y-1">
-                    <div className="text-[10px] font-semibold text-slate-600 dark:text-gray-400 flex items-center justify-between">
-                      <span>КОНФЛЮЕНС ФОРМАЦІЙ ({tradeSetup.confluence_factors.length}):</span>
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-normal">Мінімум RR 1:3 враховано</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {tradeSetup.confluence_factors.map((f, idx) => (
-                        <span
-                          key={idx}
-                          className="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 dark:bg-[#181d24] text-slate-700 dark:text-gray-300 border border-slate-200 dark:border-[#252b36] flex items-center gap-1"
-                          title={f.desc}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {f.title}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* When in WAIT mode */
-              <div className="pt-1.5 border-t border-slate-200/80 dark:border-[#222832] text-[11px] text-slate-600 dark:text-gray-400 leading-snug">
-                <div className="flex items-center justify-between text-[10px] font-mono mb-1">
-                  <span className="text-slate-400">Потенціал Long:</span>
-                  <span className={tradeSetup.long_potential?.rr && tradeSetup.long_potential.rr >= 3.0 ? 'text-[#0ecb81] font-bold' : 'text-slate-400'}>
-                    {tradeSetup.long_potential?.rr ? `RR 1:${tradeSetup.long_potential.rr.toFixed(1)}` : 'Немає запасу'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-mono mb-1.5">
-                  <span className="text-slate-400">Потенціал Short:</span>
-                  <span className={tradeSetup.short_potential?.rr && tradeSetup.short_potential.rr >= 3.0 ? 'text-[#f6465d] font-bold' : 'text-slate-400'}>
-                    {tradeSetup.short_potential?.rr ? `RR 1:${tradeSetup.short_potential.rr.toFixed(1)}` : 'Немає запасу'}
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-gray-400 italic">
-                  {tradeSetup.summary_comment}
-                </div>
-              </div>
-            )}
-
-            {/* Narrative summary comment if active and open */}
-            {isDetailsOpen && tradeSetup.entry_price !== null && (
-              <div className="text-[10px] text-slate-600 dark:text-gray-300 leading-tight bg-slate-100/60 dark:bg-[#12161c] p-1.5 rounded border border-slate-200 dark:border-[#1e2329]">
-                💡 <span className="font-medium">{tradeSetup.summary_comment}</span>
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        )}
       
       {/* 1. Market Structure & Trend Header */}
       {structure && (
