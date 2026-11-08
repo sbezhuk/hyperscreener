@@ -129,6 +129,22 @@ const TvIcons = {
       <circle cx="14" cy="14" r="3" />
     </svg>
   ),
+  LongPosition: () => (
+    <svg viewBox="0 0 28 28" width="18" height="18" fill="none">
+      <rect x="4" y="5" width="20" height="9" fill="#0ecb81" fillOpacity="0.4" stroke="#0ecb81" strokeWidth="1.2" rx="1" />
+      <rect x="4" y="14" width="20" height="9" fill="#f6465d" fillOpacity="0.4" stroke="#f6465d" strokeWidth="1.2" rx="1" />
+      <line x1="4" y1="14" x2="24" y2="14" stroke="#ffffff" strokeWidth="1.5" />
+      <polygon points="14,7 10.5,11.5 17.5,11.5" fill="#0ecb81" />
+    </svg>
+  ),
+  ShortPosition: () => (
+    <svg viewBox="0 0 28 28" width="18" height="18" fill="none">
+      <rect x="4" y="5" width="20" height="9" fill="#f6465d" fillOpacity="0.4" stroke="#f6465d" strokeWidth="1.2" rx="1" />
+      <rect x="4" y="14" width="20" height="9" fill="#0ecb81" fillOpacity="0.4" stroke="#0ecb81" strokeWidth="1.2" rx="1" />
+      <line x1="4" y1="14" x2="24" y2="14" stroke="#ffffff" strokeWidth="1.5" />
+      <polygon points="14,21 10.5,16.5 17.5,16.5" fill="#0ecb81" />
+    </svg>
+  ),
 };
 
 export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
@@ -145,7 +161,70 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
 
   // Position offset for the floating properties toolbar (user draggable)
   const [floatingOffset, setFloatingOffset] = useState<{ x: number; y: number }>({ x: 38, y: 0 });
-  const isDraggingToolbarRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+  const isDraggingToolbarRef = useRef<{
+    startX: number;
+    startY: number;
+    initX: number;
+    initY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRafRef = useRef<number | null>(null);
+
+  const updateTransformRaf = (x: number, y: number) => {
+    if (dragRafRef.current) cancelAnimationFrame(dragRafRef.current);
+    dragRafRef.current = requestAnimationFrame(() => {
+      if (panelRef.current) {
+        panelRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      }
+    });
+  };
+
+  const handleDragPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    isDraggingToolbarRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: floatingOffset.x,
+      initY: floatingOffset.y,
+      currentX: floatingOffset.x,
+      currentY: floatingOffset.y,
+    };
+  };
+
+  const handleDragPointerMove = (e: React.PointerEvent) => {
+    if (!isDraggingToolbarRef.current) return;
+    e.stopPropagation();
+    const dx = e.clientX - isDraggingToolbarRef.current.startX;
+    const dy = e.clientY - isDraggingToolbarRef.current.startY;
+    const nextX = isDraggingToolbarRef.current.initX + dx;
+    const nextY = isDraggingToolbarRef.current.initY + dy;
+    isDraggingToolbarRef.current.currentX = nextX;
+    isDraggingToolbarRef.current.currentY = nextY;
+    updateTransformRaf(nextX, nextY);
+  };
+
+  const handleDragPointerUp = (e: React.PointerEvent) => {
+    if (dragRafRef.current) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    if (isDraggingToolbarRef.current) {
+      setFloatingOffset({
+        x: isDraggingToolbarRef.current.currentX,
+        y: isDraggingToolbarRef.current.currentY,
+      });
+      isDraggingToolbarRef.current = null;
+    }
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+  };
 
   const handleDragMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -155,39 +234,116 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
       startY: e.clientY,
       initX: floatingOffset.x,
       initY: floatingOffset.y,
+      currentX: floatingOffset.x,
+      currentY: floatingOffset.y,
     };
   };
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
       if (!isDraggingToolbarRef.current) return;
       const dx = e.clientX - isDraggingToolbarRef.current.startX;
       const dy = e.clientY - isDraggingToolbarRef.current.startY;
-      setFloatingOffset({
-        x: isDraggingToolbarRef.current.initX + dx,
-        y: isDraggingToolbarRef.current.initY + dy,
-      });
+      const nextX = isDraggingToolbarRef.current.initX + dx;
+      const nextY = isDraggingToolbarRef.current.initY + dy;
+      isDraggingToolbarRef.current.currentX = nextX;
+      isDraggingToolbarRef.current.currentY = nextY;
+      updateTransformRaf(nextX, nextY);
     };
 
-    const handleMouseUp = () => {
-      isDraggingToolbarRef.current = null;
+    const handleWindowMouseUp = () => {
+      if (dragRafRef.current) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
+      if (isDraggingToolbarRef.current) {
+        setFloatingOffset({
+          x: isDraggingToolbarRef.current.currentX,
+          y: isDraggingToolbarRef.current.currentY,
+        });
+        isDraggingToolbarRef.current = null;
+      }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleWindowMouseMove, { capture: true });
+    window.addEventListener('mouseup', handleWindowMouseUp, { capture: true });
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleWindowMouseMove, { capture: true });
+      window.removeEventListener('mouseup', handleWindowMouseUp, { capture: true });
     };
   }, []);
+
+  // Position control inputs
+  const [entryInput, setEntryInput] = useState('');
+  const [tpInput, setTpInput] = useState('');
+  const [slInput, setSlInput] = useState('');
+
+  const isPosition = selectedDrawing?.type === 'long_position' || selectedDrawing?.type === 'short_position';
+
+  useEffect(() => {
+    if (isPosition && selectedDrawing && selectedDrawing.points && selectedDrawing.points.length >= 3) {
+      setEntryInput(String(selectedDrawing.points[0]?.price ?? ''));
+      setTpInput(String(selectedDrawing.points[1]?.price ?? ''));
+      setSlInput(String(selectedDrawing.points[2]?.price ?? ''));
+    }
+  }, [
+    isPosition,
+    selectedDrawing?.id,
+    selectedDrawing?.points?.[0]?.price,
+    selectedDrawing?.points?.[1]?.price,
+    selectedDrawing?.points?.[2]?.price,
+  ]);
+
+  const handlePriceChange = (pointIdx: number, valStr: string) => {
+    if (pointIdx === 0) setEntryInput(valStr);
+    if (pointIdx === 1) setTpInput(valStr);
+    if (pointIdx === 2) setSlInput(valStr);
+
+    const val = parseFloat(valStr);
+    if (!isNaN(val) && val > 0 && selectedDrawing && selectedDrawing.points.length >= 3) {
+      const nextPoints = [...selectedDrawing.points];
+      nextPoints[pointIdx] = { ...nextPoints[pointIdx], price: val };
+      onUpdateDrawing?.({ points: nextPoints }, selectedDrawing.id);
+    }
+  };
+
+  const handleQuickRatio = (ratio: number) => {
+    if (!selectedDrawing || selectedDrawing.points.length < 3) return;
+    const entry = selectedDrawing.points[0].price;
+    const sl = selectedDrawing.points[2].price;
+    const isLong = selectedDrawing.type === 'long_position';
+    const risk = Math.abs(entry - sl);
+    const newTp = isLong ? entry + risk * ratio : entry - risk * ratio;
+    const cleanTp = Number(newTp.toFixed(6));
+    const nextPoints = [...selectedDrawing.points];
+    nextPoints[1] = { ...nextPoints[1], price: cleanTp };
+    setTpInput(String(cleanTp));
+    onUpdateDrawing?.({ points: nextPoints }, selectedDrawing.id);
+  };
+
+  let positionRr = '0.00';
+  let tpPct = '0.00';
+  let slPct = '0.00';
+  if (isPosition && selectedDrawing && selectedDrawing.points && selectedDrawing.points.length >= 3) {
+    const entry = selectedDrawing.points[0]?.price ?? 0;
+    const tp = selectedDrawing.points[1]?.price ?? 0;
+    const sl = selectedDrawing.points[2]?.price ?? 0;
+    const risk = Math.abs(entry - sl);
+    const reward = Math.abs(tp - entry);
+    positionRr = risk > 0 ? (reward / risk).toFixed(2) : '0.00';
+    if (entry > 0) {
+      tpPct = ((reward / entry) * 100).toFixed(2);
+      slPct = ((risk / entry) * 100).toFixed(2);
+    }
+  }
+
+
 
   return (
     <div
       data-toolbar="drawing"
       className="absolute left-2 top-10 z-30 flex flex-col items-center select-none pointer-events-auto"
       onMouseDown={(e) => e.stopPropagation()}
-      onMouseMove={(e) => e.stopPropagation()}
-      onMouseUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Exact TradingView Left Toolbar Container */}
@@ -254,6 +410,32 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           }`}
         >
           <TvIcons.Prediction />
+        </button>
+
+        {/* 5.1 Long Position (Довга позиція TP/SL) */}
+        <button
+          type="button"
+          data-testid="tool-btn-long-position"
+          onClick={() => onSelectTool('long_position')}
+          title="Довга позиція / Long Position (TP & SL)"
+          className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+            activeTool === 'long_position' ? 'bg-[#0ecb81]/30 text-white ring-1 ring-[#0ecb81]' : 'text-[#848e9c] hover:text-white hover:bg-[#1e222d]'
+          }`}
+        >
+          <TvIcons.LongPosition />
+        </button>
+
+        {/* 5.2 Short Position (Коротка позиція TP/SL) */}
+        <button
+          type="button"
+          data-testid="tool-btn-short-position"
+          onClick={() => onSelectTool('short_position')}
+          title="Коротка позиція / Short Position (TP & SL)"
+          className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+            activeTool === 'short_position' ? 'bg-[#f6465d]/30 text-white ring-1 ring-[#f6465d]' : 'text-[#848e9c] hover:text-white hover:bg-[#1e222d]'
+          }`}
+        >
+          <TvIcons.ShortPosition />
         </button>
 
         {/* 6. Brush */}
@@ -366,142 +548,304 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         )}
       </div>
 
-      {/* Floating Selected Drawing Properties Toolbar */}
+      {/* Floating Selected Drawing Properties Toolbar / Position Card */}
       {selectedDrawing && onUpdateDrawing && onDeleteSelectedDrawing && (
         <div
+          ref={panelRef}
           data-testid="drawing-properties-panel"
-          style={{ transform: `translate(${floatingOffset.x}px, ${floatingOffset.y}px)` }}
+          style={{
+            transform: `translate3d(${floatingOffset.x}px, ${floatingOffset.y}px, 0)`,
+            transition: 'none',
+            willChange: 'transform',
+          }}
           onMouseDown={(e) => e.stopPropagation()}
-          onMouseMove={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 top-0 flex items-center gap-1.5 bg-[#131722]/95 backdrop-blur-md border border-[#2a2e39] rounded shadow-2xl px-2.5 py-1.5 z-40 select-none animate-in fade-in zoom-in-95 duration-150"
+          className={`absolute left-0 top-0 z-40 select-none touch-none ${
+            isPosition
+              ? 'w-80 bg-[#131722]/98 backdrop-blur-md border border-[#2a2e39] rounded-xl shadow-2xl p-3 flex flex-col gap-2.5'
+              : 'flex items-center gap-1.5 bg-[#131722]/95 backdrop-blur-md border border-[#2a2e39] rounded shadow-2xl px-2.5 py-1.5'
+          }`}
         >
-          {/* Drag Handle */}
-          <div
-            onMouseDown={handleDragMouseDown}
-            title="Перетягнути панель"
-            className="flex items-center text-gray-500 hover:text-gray-300 cursor-grab active:cursor-grabbing px-0.5"
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </div>
+          {/* Dedicated UI/UX for Long / Short Position: Beautiful Rectangular Card */}
+          {isPosition ? (
+            <div
+              data-testid="position-properties-toolbar"
+              className="flex flex-col gap-2.5 w-full select-none"
+            >
+              {/* Header: Drag Handle, Badge, Delete Button */}
+              <div className="flex items-center justify-between pb-1.5 border-b border-[#262b36]">
+                <div className="flex items-center gap-1.5">
+                  <div
+                    onPointerDown={handleDragPointerDown}
+                    onPointerMove={handleDragPointerMove}
+                    onPointerUp={handleDragPointerUp}
+                    onPointerCancel={handleDragPointerUp}
+                    onMouseDown={handleDragMouseDown}
+                    title="Перетягнути форму"
+                    className="flex items-center text-gray-500 hover:text-gray-300 cursor-grab active:cursor-grabbing p-0.5 touch-none"
+                  >
+                    <GripVertical className="w-3.5 h-3.5 pointer-events-none" />
+                  </div>
+                  <span
+                    className={`text-[11px] font-mono font-bold uppercase px-2 py-0.5 rounded border tracking-wider ${
+                      selectedDrawing.type === 'long_position'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}
+                  >
+                    {selectedDrawing.type === 'long_position' ? 'LONG ПОЗИЦІЯ' : 'SHORT ПОЗИЦІЯ'}
+                  </span>
+                </div>
 
-          <span className="text-[10px] font-mono font-bold text-gray-400 uppercase select-none">
-            {selectedDrawing.type}
-          </span>
-
-          <div className="w-[1px] h-4 bg-[#2a2e39]" />
-
-          {/* Color Presets */}
-          <div className="flex items-center gap-1">
-            {PRESET_COLORS.map((c) => {
-              const isCurrent = (selectedDrawing.color || '#2962ff').toLowerCase() === c.value.toLowerCase();
-              return (
                 <button
-                  key={c.value}
                   type="button"
-                  data-testid={`color-btn-${c.value}`}
+                  data-testid="delete-drawing-btn"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onUpdateDrawing({ color: c.value }, selectedDrawing.id);
+                    onDeleteSelectedDrawing(selectedDrawing.id);
                   }}
-                  title={c.name}
-                  style={{ backgroundColor: c.value }}
-                  className={`w-4 h-4 rounded-full border border-white/20 transition-transform cursor-pointer ${
-                    isCurrent ? 'scale-125 ring-2 ring-blue-500 ring-offset-1 ring-offset-[#131722]' : 'hover:scale-110 opacity-90 hover:opacity-100'
-                  }`}
-                />
-              );
-            })}
-          </div>
-
-          <div className="w-[1px] h-4 bg-[#2a2e39]" />
-
-          {/* Line Width */}
-          <div className="flex items-center gap-1">
-            {PRESET_WIDTHS.map((w) => {
-              const isCurrent = (selectedDrawing.lineWidth || 2) === w;
-              return (
-                <button
-                  key={w}
-                  type="button"
-                  data-testid={`width-btn-${w}`}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateDrawing({ lineWidth: w }, selectedDrawing.id);
-                  }}
-                  title={`Товщина: ${w}px`}
-                  className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold cursor-pointer transition-colors ${
-                    isCurrent
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-400 hover:bg-[#202634] hover:text-gray-200'
-                  }`}
+                  title="Видалити позицію (Delete / Backspace)"
+                  className="p-1 rounded text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
                 >
-                  {w}
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
-              );
-            })}
-          </div>
+              </div>
 
-          <div className="w-[1px] h-4 bg-[#2a2e39]" />
+              {/* Input Rows: Entry, TP, SL */}
+              <div className="flex flex-col gap-1.5">
+                {/* Entry Price */}
+                <div className="flex items-center justify-between bg-[#191d28]/70 border border-[#262b36] rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
+                  <span className="text-[11px] font-medium text-gray-400">Вхід</span>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="input-entry-price"
+                    value={entryInput}
+                    onChange={(e) => handlePriceChange(0, e.target.value)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="0.00"
+                    title="Ціна точки входу (Entry)"
+                    className="w-32 bg-transparent text-white font-mono text-xs text-right focus:outline-none"
+                  />
+                </div>
 
-          {/* Line Style (Solid / Dashed / Dotted) */}
-          <button
-            type="button"
-            data-testid="style-toggle-btn"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              const cur = selectedDrawing.lineStyle ?? 0;
-              const next = cur === 0 ? 2 : cur === 2 ? 1 : 0;
-              onUpdateDrawing({ lineStyle: next }, selectedDrawing.id);
-            }}
-            title="Змінити стиль лінії (Суцільна / Пунктирна / Точкова)"
-            className="px-2 py-0.5 rounded text-[10px] font-medium text-gray-300 hover:bg-[#202634] hover:text-white transition-colors cursor-pointer"
-          >
-            {(selectedDrawing.lineStyle ?? 0) === 0 ? 'Суцільна' : selectedDrawing.lineStyle === 2 ? 'Пунктир' : 'Точки'}
-          </button>
+                {/* TP Price */}
+                <div className="flex items-center justify-between bg-[#191d28]/70 border border-[#262b36] rounded-lg px-2.5 py-1.5 focus-within:border-emerald-500 transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-emerald-400">TP</span>
+                    <span className="text-[10px] text-emerald-500/80 font-mono">
+                      (+{tpPct}%)
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="input-tp-price"
+                    value={tpInput}
+                    onChange={(e) => handlePriceChange(1, e.target.value)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="0.00"
+                    title="Ціна Take Profit (Ціль)"
+                    className="w-32 bg-transparent text-emerald-400 font-mono text-xs text-right focus:outline-none"
+                  />
+                </div>
 
-          {/* Optional Text editing for Text annotations */}
-          {selectedDrawing.type === 'text' && (
+                {/* SL Price */}
+                <div className="flex items-center justify-between bg-[#191d28]/70 border border-[#262b36] rounded-lg px-2.5 py-1.5 focus-within:border-rose-500 transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-rose-400">SL</span>
+                    <span className="text-[10px] text-rose-500/80 font-mono">
+                      (-{slPct}%)
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="input-sl-price"
+                    value={slInput}
+                    onChange={(e) => handlePriceChange(2, e.target.value)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="0.00"
+                    title="Ціна Stop Loss (Стоп)"
+                    className="w-32 bg-transparent text-rose-400 font-mono text-xs text-right focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Footer: R:R Ratio & Quick Presets */}
+              <div className="pt-2 border-t border-[#262b36] flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-400">Р/П:</span>
+                  <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 border border-blue-500/25 px-1.5 py-0.5 rounded">
+                    1:{positionRr}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {[1.5, 2, 2.5, 3].map((r) => {
+                    const isCurrent = positionRr === r.toFixed(2);
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        data-testid={`rr-ratio-${r}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickRatio(r);
+                        }}
+                        title={`Встановити ціль зі співвідношенням 1:${r}`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-[#1e222d] text-gray-300 hover:bg-[#282f3d] hover:text-white border border-[#2a2e39]'
+                        }`}
+                      >
+                        1:{r}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Standard Drawings Toolbar (Trendlines, Rectangles, Fibonacci, etc.) */
             <>
+              {/* Drag Handle */}
+              <div
+                onPointerDown={handleDragPointerDown}
+                onPointerMove={handleDragPointerMove}
+                onPointerUp={handleDragPointerUp}
+                onPointerCancel={handleDragPointerUp}
+                onMouseDown={handleDragMouseDown}
+                title="Перетягнути панель"
+                className="flex items-center text-gray-500 hover:text-gray-300 cursor-grab active:cursor-grabbing px-0.5 touch-none"
+              >
+                <GripVertical className="w-3.5 h-3.5 pointer-events-none" />
+              </div>
+
+              <span className="text-[10px] font-mono font-bold text-gray-400 uppercase select-none">
+                {selectedDrawing.type}
+              </span>
+
               <div className="w-[1px] h-4 bg-[#2a2e39]" />
+
+              {/* Color Presets */}
+              <div className="flex items-center gap-1">
+                {PRESET_COLORS.map((c) => {
+                  const isCurrent = (selectedDrawing.color || '#2962ff').toLowerCase() === c.value.toLowerCase();
+                  return (
+                    <button
+                      key={c.value}
+                      type="button"
+                      data-testid={`color-btn-${c.value}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateDrawing({ color: c.value }, selectedDrawing.id);
+                      }}
+                      title={c.name}
+                      style={{ backgroundColor: c.value }}
+                      className={`w-4 h-4 rounded-full border border-white/20 transition-transform cursor-pointer ${
+                        isCurrent ? 'scale-125 ring-2 ring-blue-500 ring-offset-1 ring-offset-[#131722]' : 'hover:scale-110 opacity-90 hover:opacity-100'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="w-[1px] h-4 bg-[#2a2e39]" />
+
+              {/* Line Width */}
+              <div className="flex items-center gap-1">
+                {PRESET_WIDTHS.map((w) => {
+                  const isCurrent = (selectedDrawing.lineWidth || 2) === w;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      data-testid={`width-btn-${w}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateDrawing({ lineWidth: w }, selectedDrawing.id);
+                      }}
+                      title={`Товщина: ${w}px`}
+                      className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                        isCurrent
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-400 hover:bg-[#202634] hover:text-gray-200'
+                      }`}
+                    >
+                      {w}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="w-[1px] h-4 bg-[#2a2e39]" />
+
+              {/* Line Style (Solid / Dashed / Dotted) */}
               <button
                 type="button"
+                data-testid="style-toggle-btn"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  const newText = window.prompt('Редагувати текст нотатки:', selectedDrawing.text || '');
-                  if (newText !== null && newText.trim() !== '') {
-                    onUpdateDrawing({ text: newText.trim() }, selectedDrawing.id);
-                  }
+                  const cur = selectedDrawing.lineStyle ?? 0;
+                  const next = cur === 0 ? 2 : cur === 2 ? 1 : 0;
+                  onUpdateDrawing({ lineStyle: next }, selectedDrawing.id);
                 }}
-                title="Змінити текст нотатки"
-                className="px-1.5 py-0.5 rounded text-[10px] font-medium text-blue-400 hover:bg-[#202634] cursor-pointer"
+                title="Змінити стиль лінії (Суцільна / Пунктирна / Точкова)"
+                className="px-2 py-0.5 rounded text-[10px] font-medium text-gray-300 hover:bg-[#202634] hover:text-white transition-colors cursor-pointer"
               >
-                «{selectedDrawing.text || 'Нотатка'}»
+                {(selectedDrawing.lineStyle ?? 0) === 0 ? 'Суцільна' : selectedDrawing.lineStyle === 2 ? 'Пунктир' : 'Точки'}
+              </button>
+
+              {/* Optional Text editing for Text annotations */}
+              {selectedDrawing.type === 'text' && (
+                <>
+                  <div className="w-[1px] h-4 bg-[#2a2e39]" />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const newText = window.prompt('Редагувати текст нотатки:', selectedDrawing.text || '');
+                      if (newText !== null && newText.trim() !== '') {
+                        onUpdateDrawing({ text: newText.trim() }, selectedDrawing.id);
+                      }
+                    }}
+                    title="Змінити текст нотатки"
+                    className="px-1.5 py-0.5 rounded text-[10px] font-medium text-blue-400 hover:bg-[#202634] cursor-pointer"
+                  >
+                    «{selectedDrawing.text || 'Нотатка'}»
+                  </button>
+                </>
+              )}
+
+              <div className="w-[1px] h-4 bg-[#2a2e39]" />
+
+              {/* Delete Button */}
+              <button
+                type="button"
+                data-testid="delete-drawing-btn"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteSelectedDrawing(selectedDrawing.id);
+                }}
+                title="Видалити малюнок (Delete / Backspace)"
+                className="p-1 rounded text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </>
           )}
-
-          <div className="w-[1px] h-4 bg-[#2a2e39]" />
-
-          {/* Delete Button */}
-          <button
-            type="button"
-            data-testid="delete-drawing-btn"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteSelectedDrawing(selectedDrawing.id);
-            }}
-            title="Видалити малюнок (Delete / Backspace)"
-            className="p-1 rounded text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       )}
     </div>

@@ -333,4 +333,192 @@ describe('TradingView Drawing Tools & Primitives Verification', () => {
     assert.equal(updatedProps?.lineStyle, 2, 'Clicking style toggle from Solid (0) must switch to Dashed (2)');
     assert.equal(targetDrawingId, 'trend-1', 'Must pass target drawing id to onUpdateDrawing');
   });
+
+  test('7. Long & Short Position measurement tools with TP & SL calculation and R:R presets', () => {
+    let selectedTool: DrawingToolType = 'cursor';
+    let updatedProps: Partial<ChartDrawing> | null = null;
+    let targetDrawingId: string | undefined = undefined;
+
+    // Verify Long & Short tool buttons in toolbar
+    const { container: toolbarContainer } = rtlRender(
+      React.createElement(DrawingToolbar, {
+        activeTool: 'cursor',
+        onSelectTool: (t) => {
+          selectedTool = t;
+        },
+        drawingsCount: 0,
+      })
+    );
+
+    const longBtn = toolbarContainer.querySelector('[data-testid="tool-btn-long-position"]');
+    assert.ok(longBtn, 'Long Position button must be rendered in toolbar');
+    rtlFireEvent.click(longBtn);
+    assert.equal(selectedTool, 'long_position');
+
+    const shortBtn = toolbarContainer.querySelector('[data-testid="tool-btn-short-position"]');
+    assert.ok(shortBtn, 'Short Position button must be rendered in toolbar');
+    rtlFireEvent.click(shortBtn);
+    assert.equal(selectedTool, 'short_position');
+
+    // Verify Long Position properties toolbar: R:R ratio and quick 1:3 preset
+    const longDrawing: ChartDrawing = {
+      id: 'long-pos-1',
+      type: 'long_position',
+      coin: 'ETH',
+      points: [
+        { time: 1700000000, price: 3000 }, // Entry
+        { time: 1700003600, price: 3300 }, // TP (+300)
+        { time: 1700003600, price: 2900 }, // SL (-100, gives 3:1 R:R)
+      ],
+      color: '#0ecb81',
+      lineWidth: 2,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const { container: posContainer } = rtlRender(
+      React.createElement(DrawingToolbar, {
+        activeTool: 'cursor',
+        onSelectTool: () => {},
+        selectedDrawing: longDrawing,
+        onUpdateDrawing: (up, id) => {
+          updatedProps = up;
+          targetDrawingId = id;
+        },
+        onDeleteSelectedDrawing: () => {},
+        drawingsCount: 1,
+      })
+    );
+
+    const text = posContainer.textContent || '';
+    assert.match(text, /LONG/i, 'Must display LONG tag');
+    assert.match(text, /Р\/П:\s*1:3\.00/i, 'Must display calculated 1:3.00 R:R ratio');
+
+    // Verify presence of numeric input fields
+    const entryInput = posContainer.querySelector('[data-testid="input-entry-price"]') as HTMLInputElement;
+    const tpInput = posContainer.querySelector('[data-testid="input-tp-price"]') as HTMLInputElement;
+    const slInput = posContainer.querySelector('[data-testid="input-sl-price"]') as HTMLInputElement;
+
+    assert.ok(entryInput, 'Entry price input must be present');
+    assert.ok(tpInput, 'TP price input must be present');
+    assert.ok(slInput, 'SL price input must be present');
+    assert.equal(entryInput.value, '3000');
+    assert.equal(tpInput.value, '3300');
+    assert.equal(slInput.value, '2900');
+
+    // Test typing a new TP price (e.g. 3500)
+    rtlFireEvent.change(tpInput, { target: { value: '3500' } });
+    assert.ok(updatedProps?.points, 'Typing in TP input must trigger onUpdateDrawing');
+    assert.equal(updatedProps.points[1].price, 3500);
+
+    // Test typing a new SL price (e.g. 2800)
+    rtlFireEvent.change(slInput, { target: { value: '2800' } });
+    assert.equal(updatedProps.points[2].price, 2800);
+
+    // Click 1:2 preset button: should set TP to 3000 + (100 * 2) = 3200
+    const rr2Btn = posContainer.querySelector('[data-testid="rr-ratio-2"]');
+    assert.ok(rr2Btn, '1:2 R:R preset button must exist');
+    rtlFireEvent.click(rr2Btn);
+    assert.ok(updatedProps?.points, 'Updated points must be provided');
+    assert.equal(updatedProps.points[1].price, 3200, 'TP price must be updated to 3200 for 1:2 R:R ratio');
+    assert.equal(targetDrawingId, 'long-pos-1');
+
+    // Verify DrawingsPrimitive renders Long & Short position without throwing
+    const primitive = new DrawingsPrimitive();
+    const mockChart = {
+      timeScale: () => ({ timeToCoordinate: () => 100 }),
+    };
+    const mockSeries = {
+      priceToCoordinate: () => 150,
+    };
+    primitive.attached({
+      chart: mockChart as any,
+      series: mockSeries as any,
+      requestUpdate: () => {},
+    });
+
+    primitive.updateData({
+      drawings: [longDrawing],
+      selectedDrawingId: 'long-pos-1',
+      theme: 'dark',
+    });
+
+    const views = primitive.paneViews();
+    assert.equal(views.length, 1);
+    primitive.detached();
+  });
+
+  test('8. Stretching position into the future beyond candles and calculating future coordinates', () => {
+    const primitive = new DrawingsPrimitive();
+    let logicalCalculated = -1;
+
+    const mockCandles: any[] = [
+      { time: 1000, open: 100, high: 110, low: 90, close: 105 },
+      { time: 1060, open: 105, high: 115, low: 100, close: 112 },
+    ];
+
+    const mockChart = {
+      timeScale: () => ({
+        timeToCoordinate: (t: number) => (t <= 1060 ? 100 : null), // future times return null in lightweight-charts
+        logicalToCoordinate: (logical: number) => {
+          logicalCalculated = logical;
+          return 100 + (logical - 1) * 20; // 20px per bar
+        },
+      }),
+    };
+    const mockSeries = {
+      priceToCoordinate: (p: number) => p * 2,
+    };
+
+    primitive.attached({
+      chart: mockChart as any,
+      series: mockSeries as any,
+      requestUpdate: () => {},
+    });
+
+    // Position extending 10 bars (600s) into the future
+    const futureDrawing: ChartDrawing = {
+      id: 'pos-future-1',
+      type: 'long_position',
+      coin: 'ETH',
+      points: [
+        { time: 1060, price: 105 },
+        { time: 1660, price: 120 }, // 10 bars in the future!
+        { time: 1660, price: 95 },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    primitive.updateData({
+      drawings: [futureDrawing],
+      selectedDrawingId: 'pos-future-1',
+      candles: mockCandles,
+    });
+
+    const views = primitive.paneViews();
+    assert.equal(views.length, 1);
+    const mockCtx = {
+      save: () => {},
+      restore: () => {},
+      beginPath: () => {},
+      stroke: () => {},
+      fill: () => {},
+      rect: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      arc: () => {},
+      measureText: () => ({ width: 40 }),
+      fillText: () => {},
+      setLineDash: () => {},
+    };
+    views[0].renderer().draw({
+      useMediaCoordinateSpace: (cb: any) => cb({ context: mockCtx, mediaSize: { width: 800, height: 600 } }),
+    });
+
+    assert.ok(logicalCalculated > 1, 'Must compute future logical index for future timestamps');
+    primitive.detached();
+  });
 });

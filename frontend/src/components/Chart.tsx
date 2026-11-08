@@ -31,7 +31,8 @@ function findDrawingAtCoords(
   series: ISeriesApi<'Candlestick'> | null,
   pixelX: number,
   pixelY: number,
-  allDrawings: ChartDrawing[]
+  allDrawings: ChartDrawing[],
+  candles?: Candle[]
 ): { drawing: ChartDrawing; handleIndex?: number } | null {
   if (!chart || !series) return null;
   const timeScale = chart.timeScale();
@@ -39,8 +40,29 @@ function findDrawingAtCoords(
   for (let i = allDrawings.length - 1; i >= 0; i--) {
     const d = allDrawings[i];
     const coords = (d.points || []).map((p) => {
-      const x = (timeScale as any).timeToCoordinate ? (timeScale as any).timeToCoordinate(p.time as any) : null;
+      let x = (timeScale as any).timeToCoordinate ? (timeScale as any).timeToCoordinate(p.time as any) : null;
       const y = (series as any).priceToCoordinate ? (series as any).priceToCoordinate(p.price) : null;
+
+      if (x === null && candles && candles.length > 0) {
+        const last = candles[candles.length - 1];
+        const first = candles[0];
+        if (p.time >= last.time) {
+          const prev = candles[Math.max(0, candles.length - 2)];
+          const dt = last.time - prev.time || 60;
+          const futureLogical = candles.length - 1 + (p.time - last.time) / dt;
+          if ((timeScale as any).logicalToCoordinate) {
+            x = (timeScale as any).logicalToCoordinate(futureLogical);
+          }
+        } else if (p.time <= first.time) {
+          const next = candles[1] || first;
+          const dt = next.time - first.time || 60;
+          const pastLogical = (p.time - first.time) / dt;
+          if ((timeScale as any).logicalToCoordinate) {
+            x = (timeScale as any).logicalToCoordinate(pastLogical);
+          }
+        }
+      }
+
       return { x, y };
     });
 
@@ -120,6 +142,44 @@ function findDrawingAtCoords(
           }
         }
       }
+    } else if (d.type === 'long_position' || d.type === 'short_position') {
+      if (coords.length >= 3) {
+        const c0 = coords[0]; // Entry
+        const c1 = coords[1]; // TP
+        const c2 = coords[2]; // SL
+        if (c0.x !== null && c0.y !== null && c1.y !== null && c2.y !== null) {
+          const xStart = c0.x;
+          const xEnd = c1.x !== null ? c1.x : (c2.x !== null ? c2.x : xStart + 150);
+          const left = Math.min(xStart, xEnd);
+          const right = Math.max(xStart, xEnd);
+          const top = Math.min(c0.y, c1.y, c2.y);
+          const bottom = Math.max(c0.y, c1.y, c2.y);
+          const xMid = (left + right) / 2;
+
+          // Check handles:
+          // Handle 1 (TP): at (xMid, c1.y)
+          if (Math.hypot(pixelX - xMid, pixelY - c1.y) <= 12) {
+            return { drawing: d, handleIndex: 1 };
+          }
+          // Handle 2 (SL): at (xMid, c2.y)
+          if (Math.hypot(pixelX - xMid, pixelY - c2.y) <= 12) {
+            return { drawing: d, handleIndex: 2 };
+          }
+          // Handle 0 (Entry left handle): at (left, c0.y)
+          if (Math.hypot(pixelX - left, pixelY - c0.y) <= 12) {
+            return { drawing: d, handleIndex: 0 };
+          }
+          // Handle 3 (Right edge / Duration): at (right, c0.y)
+          if (Math.hypot(pixelX - right, pixelY - c0.y) <= 12) {
+            return { drawing: d, handleIndex: 3 };
+          }
+
+          // Check inside position bounding box
+          if (pixelX >= left - 6 && pixelX <= right + 6 && pixelY >= top - 6 && pixelY <= bottom + 6) {
+            return { drawing: d };
+          }
+        }
+      }
     }
   }
 
@@ -175,6 +235,12 @@ export const Chart: React.FC<ChartProps> = ({
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   const [activeDrawing, setActiveDrawing] = useState<ChartDrawing | null>(null);
   const isDraggingHandleRef = useRef<{ drawingId: string; pointIndex: number } | null>(null);
+  const isDraggingBodyRef = useRef<{
+    drawingId: string;
+    startPt: ChartDrawingPoint;
+    initialPoints: ChartDrawingPoint[];
+  } | null>(null);
+  const chartDragRafRef = useRef<number | null>(null);
 
   const activeToolRef = useRef(activeTool);
   activeToolRef.current = activeTool;
@@ -199,9 +265,10 @@ export const Chart: React.FC<ChartProps> = ({
         activeDrawing,
         selectedDrawingId,
         theme: isDark ? 'dark' : 'light',
+        candles,
       });
     }
-  }, [drawings, activeDrawing, selectedDrawingId, isDark]);
+  }, [drawings, activeDrawing, selectedDrawingId, isDark, candles]);
 
   const onLoadEarlierRef = useRef(onLoadEarlier);
   onLoadEarlierRef.current = onLoadEarlier;
@@ -218,6 +285,8 @@ export const Chart: React.FC<ChartProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        isDraggingHandleRef.current = null;
+        isDraggingBodyRef.current = null;
         setActiveTool('cursor');
         setActiveDrawing(null);
         setSelectedDrawingId(null);
@@ -307,11 +376,20 @@ export const Chart: React.FC<ChartProps> = ({
       const pixelY = e.clientY - rect.top;
 
       if (activeToolRef.current === 'cursor') {
-        const hit = findDrawingAtCoords(chartRef.current, candleSeriesRef.current, pixelX, pixelY, drawingsRef.current);
+        const hit = findDrawingAtCoords(chartRef.current, candleSeriesRef.current, pixelX, pixelY, drawingsRef.current, candles);
         if (hit) {
           setSelectedDrawingId(hit.drawing.id);
+          const pt = getPointFromMouseEvent(e);
           if (hit.handleIndex !== undefined) {
             isDraggingHandleRef.current = { drawingId: hit.drawing.id, pointIndex: hit.handleIndex };
+            chartRef.current.applyOptions({ handleScroll: false, handleScale: false });
+          } else if (pt) {
+            // Drag the entire position / drawing body from anywhere!
+            isDraggingBodyRef.current = {
+              drawingId: hit.drawing.id,
+              startPt: pt,
+              initialPoints: hit.drawing.points.map((p) => ({ ...p })),
+            };
             chartRef.current.applyOptions({ handleScroll: false, handleScale: false });
           }
         } else {
@@ -392,6 +470,44 @@ export const Chart: React.FC<ChartProps> = ({
         return;
       }
 
+      if (tool === 'long_position' || tool === 'short_position') {
+        const isLong = tool === 'long_position';
+        let barDeltaSec = 900;
+        if (candles && candles.length >= 2) {
+          barDeltaSec = Math.max(60, candles[candles.length - 1].time - candles[candles.length - 2].time);
+        }
+        const endTime = pt.time + 20 * barDeltaSec;
+        const entryPrice = pt.price;
+        const slPrice = isLong ? entryPrice * 0.985 : entryPrice * 1.015;
+        const tpPrice = isLong ? entryPrice * 1.03 : entryPrice * 0.97;
+
+        const newDrawing: ChartDrawing = {
+          id: `pos-${now}`,
+          type: tool,
+          coin: coin.toUpperCase(),
+          timeframe: interval,
+          points: [
+            { time: pt.time, price: entryPrice },
+            { time: endTime, price: tpPrice },
+            { time: endTime, price: slPrice },
+          ],
+          color: isLong ? '#0ecb81' : '#f6465d',
+          lineWidth: 2,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const updated = [...drawingsRef.current, newDrawing];
+        setDrawings(updated);
+        saveCoinDrawings(coin, updated);
+        setSelectedDrawingId(newDrawing.id);
+        setActiveTool('cursor');
+        chartRef.current.applyOptions({ handleScroll: true, handleScale: true });
+        if (drawingsPrimitiveRef.current) {
+          drawingsPrimitiveRef.current.updateData({ drawings: updated, selectedDrawingId: newDrawing.id });
+        }
+        return;
+      }
+
       if (tool === 'brush') {
         const newDrawing: ChartDrawing = {
           id: `draw-${now}`,
@@ -434,14 +550,81 @@ export const Chart: React.FC<ChartProps> = ({
         const updated = drawingsRef.current.map((d) => {
           if (d.id !== drawingId) return d;
           const nextPoints = [...d.points];
-          nextPoints[pointIndex] = pt;
+          if (d.type === 'long_position' || d.type === 'short_position') {
+            if (pointIndex === 0) {
+              // Move entry & adjust TP/SL price delta
+              const dPrice = pt.price - d.points[0].price;
+              const dTime = pt.time - d.points[0].time;
+              nextPoints[0] = { time: pt.time, price: pt.price };
+              if (nextPoints[1]) nextPoints[1] = { time: nextPoints[1].time + dTime, price: nextPoints[1].price + dPrice };
+              if (nextPoints[2]) nextPoints[2] = { time: nextPoints[2].time + dTime, price: nextPoints[2].price + dPrice };
+            } else if (pointIndex === 1) {
+              // Adjust TP price and horizontal duration
+              nextPoints[1] = { time: pt.time, price: pt.price };
+              if (nextPoints[2]) nextPoints[2] = { ...nextPoints[2], time: pt.time };
+            } else if (pointIndex === 2) {
+              // Adjust SL price and horizontal duration
+              nextPoints[2] = { time: pt.time, price: pt.price };
+              if (nextPoints[1]) nextPoints[1] = { ...nextPoints[1], time: pt.time };
+            } else if (pointIndex === 3) {
+              // Adjust horizontal duration only
+              if (nextPoints[1]) nextPoints[1] = { ...nextPoints[1], time: pt.time };
+              if (nextPoints[2]) nextPoints[2] = { ...nextPoints[2], time: pt.time };
+            }
+          } else {
+            nextPoints[pointIndex] = pt;
+          }
           return { ...d, points: nextPoints, updatedAt: Date.now() };
         });
-        setDrawings(updated);
-        if (drawingsPrimitiveRef.current) {
-          drawingsPrimitiveRef.current.updateData({ drawings: updated });
-        }
+        drawingsRef.current = updated;
+        if (chartDragRafRef.current) cancelAnimationFrame(chartDragRafRef.current);
+        chartDragRafRef.current = requestAnimationFrame(() => {
+          if (drawingsPrimitiveRef.current) {
+            drawingsPrimitiveRef.current.updateData({ drawings: drawingsRef.current });
+          }
+        });
         return;
+      }
+
+      // Dragging entire drawing/position body
+      if (isDraggingBodyRef.current) {
+        const pt = getPointFromMouseEvent(e);
+        if (!pt) return;
+        const { drawingId, startPt, initialPoints } = isDraggingBodyRef.current;
+        const dPrice = pt.price - startPt.price;
+        const dTime = pt.time - startPt.time;
+
+        const updated = drawingsRef.current.map((d) => {
+          if (d.id !== drawingId) return d;
+          const nextPoints = initialPoints.map((p) => ({
+            time: p.time + dTime,
+            price: p.price + dPrice,
+          }));
+          return { ...d, points: nextPoints, updatedAt: Date.now() };
+        });
+
+        drawingsRef.current = updated;
+        if (chartDragRafRef.current) cancelAnimationFrame(chartDragRafRef.current);
+        chartDragRafRef.current = requestAnimationFrame(() => {
+          if (drawingsPrimitiveRef.current) {
+            drawingsPrimitiveRef.current.updateData({ drawings: drawingsRef.current });
+          }
+        });
+        return;
+      }
+
+      // Cursor hover feedback for position tools
+      if (!isDraggingHandleRef.current && !isDraggingBodyRef.current && activeToolRef.current === 'cursor') {
+        if (!chartRef.current || !candleSeriesRef.current || !chartContainerRef.current) return;
+        const rect = chartContainerRef.current.getBoundingClientRect();
+        const pixelX = e.clientX - rect.left;
+        const pixelY = e.clientY - rect.top;
+        const hit = findDrawingAtCoords(chartRef.current, candleSeriesRef.current, pixelX, pixelY, drawingsRef.current, candles);
+        if (hit && (hit.drawing.type === 'long_position' || hit.drawing.type === 'short_position')) {
+          chartContainerRef.current.style.cursor = hit.handleIndex !== undefined ? 'pointer' : 'move';
+        } else if (chartContainerRef.current && activeToolRef.current === 'cursor') {
+          chartContainerRef.current.style.cursor = 'default';
+        }
       }
 
       if (activeDrawingRef.current) {
@@ -471,9 +654,23 @@ export const Chart: React.FC<ChartProps> = ({
   );
 
   const handleContainerMouseUp = useCallback(() => {
+    if (chartDragRafRef.current) {
+      cancelAnimationFrame(chartDragRafRef.current);
+      chartDragRafRef.current = null;
+    }
+
     if (isDraggingHandleRef.current) {
+      setDrawings(drawingsRef.current);
       saveCoinDrawings(coin, drawingsRef.current);
       isDraggingHandleRef.current = null;
+      chartRef.current?.applyOptions({ handleScroll: true, handleScale: true });
+      return;
+    }
+
+    if (isDraggingBodyRef.current) {
+      setDrawings(drawingsRef.current);
+      saveCoinDrawings(coin, drawingsRef.current);
+      isDraggingBodyRef.current = null;
       chartRef.current?.applyOptions({ handleScroll: true, handleScale: true });
       return;
     }
@@ -489,6 +686,26 @@ export const Chart: React.FC<ChartProps> = ({
       chartRef.current?.applyOptions({ handleScroll: true, handleScale: true });
     }
   }, [coin]);
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDraggingHandleRef.current && !isDraggingBodyRef.current) return;
+      handleContainerMouseMove(e as any);
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDraggingHandleRef.current || isDraggingBodyRef.current) {
+        handleContainerMouseUp();
+      }
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [handleContainerMouseMove, handleContainerMouseUp]);
 
   const handleUpdateSelectedDrawing = useCallback(
     (props: Partial<ChartDrawing>, targetId?: string) => {

@@ -25,6 +25,8 @@ export type DrawingToolType =
   | 'text'
   | 'ruler'
   | 'brush'
+  | 'long_position'
+  | 'short_position'
   | 'eraser';
 
 export interface ChartDrawingPoint {
