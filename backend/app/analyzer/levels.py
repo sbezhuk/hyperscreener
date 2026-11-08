@@ -658,8 +658,8 @@ def _detect_smc_order_blocks(
 
                     if not is_broken:
                         # Clean active or mitigated Demand OB
-                        # Only relevant as support if price is above or currently testing it
-                        if current_price >= ob_bottom - 0.5 * atr:
+                        # Only valid as support when current price is strictly ABOVE the demand zone
+                        if current_price >= ob_top:
                             is_mitigated = touches > 1
                             status = "retested" if is_mitigated else "active"
                             base_score = 82.0 if is_mitigated else 92.0
@@ -678,7 +678,7 @@ def _detect_smc_order_blocks(
                                 "strength_score": min(base_score, 100.0),
                                 "status": status,
                                 "zone_id": f"smc-ob-dem-{i}-{str(uuid.uuid4())[:4]}",
-                                "type": "support" if ob_center <= current_price else "resistance",
+                                "type": "support",
                                 "timeframe": interval,
                                 "first_detected_at": c_time,
                                 "last_tested_at": latest_tested,
@@ -692,7 +692,7 @@ def _detect_smc_order_blocks(
                         # Breaker Block validation:
                         # A broken Bullish OB only becomes a valid Bearish Breaker (Resistance) if:
                         # 1. The break is relatively recent (within 40 bars)
-                        # 2. Current price is below the zone (overhead resistance)
+                        # 2. Current price is strictly below the zone (overhead resistance)
                         # 3. Price hasn't closed back above ob_top (not invalidated chop)
                         bars_since_break = n - break_idx if break_idx >= 0 else 999
                         after_break = candles[break_idx + 1 : n] if break_idx >= 0 else []
@@ -700,7 +700,7 @@ def _detect_smc_order_blocks(
 
                         if (
                             bars_since_break <= 40
-                            and current_price <= ob_top + 0.3 * atr
+                            and current_price <= ob_bottom
                             and not closed_back_above
                         ):
                             order_blocks.append({
@@ -761,7 +761,8 @@ def _detect_smc_order_blocks(
 
                     if not is_broken:
                         # Clean active or mitigated Supply OB
-                        if current_price <= ob_top + 0.5 * atr:
+                        # Only valid as resistance when current price is strictly BELOW the supply zone
+                        if current_price <= ob_bottom:
                             is_mitigated = touches > 1
                             status = "retested" if is_mitigated else "active"
                             base_score = 82.0 if is_mitigated else 92.0
@@ -780,7 +781,7 @@ def _detect_smc_order_blocks(
                                 "strength_score": min(base_score, 100.0),
                                 "status": status,
                                 "zone_id": f"smc-ob-sup-{i}-{str(uuid.uuid4())[:4]}",
-                                "type": "resistance" if ob_center >= current_price else "support",
+                                "type": "resistance",
                                 "timeframe": interval,
                                 "first_detected_at": c_time,
                                 "last_tested_at": latest_tested,
@@ -794,7 +795,7 @@ def _detect_smc_order_blocks(
                         # Breaker Block validation:
                         # A broken Bearish OB only becomes a valid Bullish Breaker (Support) if:
                         # 1. The break is relatively recent (within 40 bars)
-                        # 2. Current price is above the zone (underlying support)
+                        # 2. Current price is strictly above the zone (underlying support)
                         # 3. Price hasn't closed back below ob_bottom
                         bars_since_break = n - break_idx if break_idx >= 0 else 999
                         after_break = candles[break_idx + 1 : n] if break_idx >= 0 else []
@@ -802,7 +803,7 @@ def _detect_smc_order_blocks(
 
                         if (
                             bars_since_break <= 40
-                            and current_price >= ob_bottom - 0.3 * atr
+                            and current_price >= ob_top
                             and not closed_back_below
                         ):
                             order_blocks.append({
@@ -875,7 +876,11 @@ def _detect_smc_liquidity_pools(
                 if is_swept and abs(avg_px - current_price) > 3.0 * atr:
                     continue
 
-                zone_type = "resistance" if avg_px >= current_price else "support"
+                # BSL (Buy-side Liquidity) acts as overhead resistance above current price
+                if avg_px <= current_price:
+                    continue
+                bottom = max(avg_px - 0.25 * atr, current_price + 0.05 * atr)
+                zone_type = "resistance"
                 score = 75.0 if is_swept else min(88.0 + len(cluster) * 3.0, 98.0)
 
                 pools.append({
@@ -925,7 +930,11 @@ def _detect_smc_liquidity_pools(
                 if is_swept and abs(avg_px - current_price) > 3.0 * atr:
                     continue
 
-                zone_type = "support" if avg_px < current_price else "resistance"
+                # SSL (Sell-side Liquidity) acts as underlying support below current price
+                if avg_px >= current_price:
+                    continue
+                top = min(avg_px + 0.25 * atr, current_price - 0.05 * atr)
+                zone_type = "support"
                 score = 75.0 if is_swept else min(88.0 + len(cluster) * 3.0, 98.0)
 
                 pools.append({
@@ -1016,45 +1025,49 @@ def analyze_levels(
     structural_swings: List[Dict[str, Any]] = []
     for h in swings.get("highs", []):
         px = h["price"]
-        half_w = max(0.25 * atr, px * 0.0008)
-        structural_swings.append({
-            "center_price": round(px, decimals),
-            "upper_price": round(px + half_w, decimals),
-            "lower_price": round(px - half_w, decimals),
-            "touches_count": 1,
-            "average_bounce_atr": 1.2,
-            "volume_confirmation": 0.7,
-            "strength_score": 75.0,
-            "status": "active" if px >= current_price else "retested",
-            "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
-            "type": "resistance" if px >= current_price else "support",
-            "timeframe": interval,
-            "first_detected_at": h["time"],
-            "last_tested_at": h["time"],
-            "smc_type": "STRUCTURE_ORIGIN",
-            "smc_label": "Supply",
-        })
+        if px > current_price:
+            half_w = max(0.20 * atr, px * 0.0008)
+            lower_p = max(px - half_w, current_price + 0.05 * atr)
+            structural_swings.append({
+                "center_price": round(px, decimals),
+                "upper_price": round(px + half_w, decimals),
+                "lower_price": round(lower_p, decimals),
+                "touches_count": 1,
+                "average_bounce_atr": 1.2,
+                "volume_confirmation": 0.7,
+                "strength_score": 75.0,
+                "status": "active",
+                "zone_id": f"smc-struct-h-{str(uuid.uuid4())[:4]}",
+                "type": "resistance",
+                "timeframe": interval,
+                "first_detected_at": h["time"],
+                "last_tested_at": h["time"],
+                "smc_type": "STRUCTURE_ORIGIN",
+                "smc_label": "Supply",
+            })
 
     for l in swings.get("lows", []):
         px = l["price"]
-        half_w = max(0.25 * atr, px * 0.0008)
-        structural_swings.append({
-            "center_price": round(px, decimals),
-            "upper_price": round(px + half_w, decimals),
-            "lower_price": round(px - half_w, decimals),
-            "touches_count": 1,
-            "average_bounce_atr": 1.2,
-            "volume_confirmation": 0.7,
-            "strength_score": 75.0,
-            "status": "active" if px < current_price else "retested",
-            "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
-            "type": "support" if px < current_price else "resistance",
-            "timeframe": interval,
-            "first_detected_at": l["time"],
-            "last_tested_at": l["time"],
-            "smc_type": "STRUCTURE_ORIGIN",
-            "smc_label": "Demand",
-        })
+        if px < current_price:
+            half_w = max(0.20 * atr, px * 0.0008)
+            upper_p = min(px + half_w, current_price - 0.05 * atr)
+            structural_swings.append({
+                "center_price": round(px, decimals),
+                "upper_price": round(upper_p, decimals),
+                "lower_price": round(px - half_w, decimals),
+                "touches_count": 1,
+                "average_bounce_atr": 1.2,
+                "volume_confirmation": 0.7,
+                "strength_score": 75.0,
+                "status": "active",
+                "zone_id": f"smc-struct-l-{str(uuid.uuid4())[:4]}",
+                "type": "support",
+                "timeframe": interval,
+                "first_detected_at": l["time"],
+                "last_tested_at": l["time"],
+                "smc_type": "STRUCTURE_ORIGIN",
+                "smc_label": "Demand",
+            })
 
     # Optional classic pivot points candidate generation if explicitly requested
     pivot_candidates: List[Dict[str, Any]] = []
@@ -1102,9 +1115,18 @@ def analyze_levels(
     for c in all_candidates:
         formatted_candidates.append(_add_legacy_fields(c, current_price))
 
-    # Separate into resistances (above or at current price) and supports (below current price)
-    resistances_pool = [c for c in formatted_candidates if c["type"] == "resistance" and c["price"] >= current_price]
-    supports_pool = [c for c in formatted_candidates if c["type"] == "support" and c["price"] < current_price]
+    # Separate into resistances (above current price) and supports (below current price)
+    # Strict SMC Dealing Range Separation:
+    # A resistance MUST reside strictly ABOVE current price (bottom >= current_price)
+    # A support MUST reside strictly BELOW current price (top <= current_price)
+    resistances_pool = [
+        c for c in formatted_candidates
+        if c["type"] == "resistance" and c["bottom"] >= current_price and c["price"] > current_price
+    ]
+    supports_pool = [
+        c for c in formatted_candidates
+        if c["type"] == "support" and c["top"] <= current_price and c["price"] < current_price
+    ]
 
     # Spacing and Confluence Selection:
     # Generous minimum separation between key levels to eliminate chart noise and band stacking
@@ -1184,14 +1206,23 @@ def analyze_levels(
                 # Upgrade label if confluent candidate has higher institutional tier
                 if z.get("smc_type") == "ORDER_BLOCK" and confluent.get("smc_type") != "ORDER_BLOCK":
                     confluent["smc_type"] = z["smc_type"]
-                    confluent["smc_label"] = z["smc_label"]
+                    confluent["smc_label"] = "OB Supply" if is_resistance else "OB Demand"
                 elif z.get("smc_type") == "LIQUIDITY_POOL" and confluent.get("smc_type") not in ("ORDER_BLOCK", "LIQUIDITY_POOL"):
                     confluent["smc_type"] = z["smc_type"]
-                    confluent["smc_label"] = z["smc_label"]
+                    confluent["smc_label"] = "BSL" if is_resistance else "SSL"
 
-        # Clean up temporary composite score field
+        # Clean up temporary composite score field and enforce strict polarity rules:
+        # A resistance can NEVER carry Demand label; a support can NEVER carry Supply label.
         for z in selected:
             z.pop("_composite_score", None)
+            if is_resistance:
+                z["type"] = "resistance"
+                if z.get("smc_label") in ("OB Demand", "Demand"):
+                    z["smc_label"] = "OB Supply"
+            else:
+                z["type"] = "support"
+                if z.get("smc_label") in ("OB Supply", "Supply"):
+                    z["smc_label"] = "OB Demand"
 
         return selected
 
@@ -1203,60 +1234,87 @@ def analyze_levels(
     # Sort supports descending (closest below price first)
     clean_supports.sort(key=lambda s: s["price"], reverse=True)
 
-    # Dynamic Discovery: if no supports or resistances exist (e.g. price at ATH or ATL)
-    if not clean_supports and swings.get("lows"):
-        candidate_lows = [s for s in swings["lows"] if s["price"] < current_price]
+    # Cross-Polarity Non-Collision Invariant:
+    # Under NO circumstances can a resistance and a support occupy the same level or overlap!
+    min_dealing_gap = max(0.8 * atr, current_price * 0.006)
+    while clean_resistances and clean_supports and (clean_resistances[0]["bottom"] < clean_supports[0]["top"] + min_dealing_gap):
+        # A collision occurred: resistance bottom is too close to or below support top!
+        # Eliminate the inner candidate that is local chop closer to current price
+        dist_r = abs(clean_resistances[0]["price"] - current_price)
+        dist_s = abs(clean_supports[0]["price"] - current_price)
+        if dist_r <= dist_s:
+            clean_resistances.pop(0)
+        else:
+            clean_supports.pop(0)
+
+    # Dynamic Discovery: if no supports or resistances exist (e.g. price at ATH, ATL, or after collision pruning)
+    if not clean_supports:
+        candidate_lows = [s for s in swings.get("lows", []) if s["price"] < current_price - 0.2 * atr]
         if candidate_lows:
             candidate_lows.sort(key=lambda s: s["time"], reverse=True)
-            new_s = candidate_lows[0]
-            center = new_s["price"]
-            half_w = 0.35 * atr
-            s_time = new_s.get("time", candles[0]["time"] if candles else 0)
-            zone = {
-                "center_price": round(center, decimals),
-                "upper_price": round(center + half_w, decimals),
-                "lower_price": round(center - half_w, decimals),
-                "touches_count": 1,
-                "average_bounce_atr": 1.0,
-                "volume_confirmation": 0.5,
-                "strength_score": 50.0,
-                "status": "active",
-                "zone_id": str(uuid.uuid4())[:8],
-                "type": "support",
-                "timeframe": interval,
-                "first_detected_at": s_time,
-                "last_tested_at": s_time,
-                "smc_type": "STRUCTURE_ORIGIN",
-                "smc_label": "OB Demand",
-            }
-            clean_supports.append(_add_legacy_fields(zone, current_price))
+            chosen_l = candidate_lows[0]["price"]
+            s_time = candidate_lows[0].get("time", candles[-1]["time"] if candles else 0)
+        else:
+            recent_lows = [c["low"] for c in candles[-min(len(candles), 50):] if c["low"] < current_price - 0.2 * atr]
+            chosen_l = min(recent_lows) if recent_lows else current_price - 1.5 * atr
+            s_time = candles[-1].get("time", 0) if candles else 0
 
-    if not clean_resistances and swings.get("highs"):
-        candidate_highs = [s for s in swings["highs"] if s["price"] > current_price]
+        half_w = max(0.25 * atr, chosen_l * 0.0008)
+        u_p = min(chosen_l + half_w, current_price - 0.05 * atr)
+        zone = {
+            "center_price": round(chosen_l, decimals),
+            "upper_price": round(u_p, decimals),
+            "lower_price": round(chosen_l - half_w, decimals),
+            "touches_count": 1,
+            "average_bounce_atr": 1.0,
+            "volume_confirmation": 0.5,
+            "strength_score": 70.0,
+            "status": "active",
+            "zone_id": str(uuid.uuid4())[:8],
+            "type": "support",
+            "timeframe": interval,
+            "first_detected_at": s_time,
+            "last_tested_at": s_time,
+            "smc_type": "STRUCTURE_ORIGIN",
+            "smc_label": "OB Demand",
+        }
+        clean_supports.append(_add_legacy_fields(zone, current_price))
+
+    if not clean_resistances:
+        candidate_highs = [s for s in swings.get("highs", []) if s["price"] > current_price + 0.2 * atr]
         if candidate_highs:
             candidate_highs.sort(key=lambda s: s["time"], reverse=True)
-            new_r = candidate_highs[0]
-            center = new_r["price"]
-            half_w = 0.35 * atr
-            r_time = new_r.get("time", candles[0]["time"] if candles else 0)
-            zone = {
-                "center_price": round(center, decimals),
-                "upper_price": round(center + half_w, decimals),
-                "lower_price": round(center - half_w, decimals),
-                "touches_count": 1,
-                "average_bounce_atr": 1.0,
-                "volume_confirmation": 0.5,
-                "strength_score": 50.0,
-                "status": "active",
-                "zone_id": str(uuid.uuid4())[:8],
-                "type": "resistance",
-                "timeframe": interval,
-                "first_detected_at": r_time,
-                "last_tested_at": r_time,
-                "smc_type": "STRUCTURE_ORIGIN",
-                "smc_label": "OB Supply",
-            }
-            clean_resistances.append(_add_legacy_fields(zone, current_price))
+            chosen_h = candidate_highs[0]["price"]
+            r_time = candidate_highs[0].get("time", candles[-1]["time"] if candles else 0)
+        else:
+            recent_highs = [c["high"] for c in candles[-min(len(candles), 50):] if c["high"] > current_price + 0.2 * atr]
+            chosen_h = max(recent_highs) if recent_highs else current_price + 1.5 * atr
+            r_time = candles[-1].get("time", 0) if candles else 0
+
+        half_w = max(0.25 * atr, chosen_h * 0.0008)
+        l_p = max(chosen_h - half_w, current_price + 0.05 * atr)
+        zone = {
+            "center_price": round(chosen_h, decimals),
+            "upper_price": round(chosen_h + half_w, decimals),
+            "lower_price": round(l_p, decimals),
+            "touches_count": 1,
+            "average_bounce_atr": 1.0,
+            "volume_confirmation": 0.5,
+            "strength_score": 70.0,
+            "status": "active",
+            "zone_id": str(uuid.uuid4())[:8],
+            "type": "resistance",
+            "timeframe": interval,
+            "first_detected_at": r_time,
+            "last_tested_at": r_time,
+            "smc_type": "STRUCTURE_ORIGIN",
+            "smc_label": "OB Supply",
+        }
+        clean_resistances.append(_add_legacy_fields(zone, current_price))
+
+    # Final re-sort to ensure correct order
+    clean_resistances.sort(key=lambda r: r["price"])
+    clean_supports.sort(key=lambda s: s["price"], reverse=True)
 
     # Cascade detection within closest resistances
     cascades: List[Dict[str, Any]] = []

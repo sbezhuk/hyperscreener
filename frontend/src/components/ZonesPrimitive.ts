@@ -693,14 +693,14 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const sc = r.strength_score !== undefined ? Math.round(r.strength_score) : undefined;
         const tfBadge = r.timeframe ? ` [${r.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
 
-        let tag = 'ОПІР';
-        if (r.smc_label === 'OB Supply') tag = '[OB SUPPLY]';
-        else if (r.smc_label === 'OB Demand') tag = '[OB DEMAND]';
-        else if (r.smc_label === 'BSL') tag = '[BSL ЛІКВІДНІСТЬ]';
-        else if (r.smc_label === 'SSL') tag = '[SSL ЛІКВІДНІСТЬ]';
-        else if (r.smc_label === 'Breaker') tag = '[BREAKER]';
+        // Resistance Zone Label: Strictly Supply / BSL / Breaker
+        let tag = '[OB SUPPLY]';
+        if (r.smc_label === 'BSL') tag = '[BSL ЛІКВІДНІСТЬ]';
+        else if (r.smc_label === 'Breaker' || r.smc_type === 'BREAKER_BLOCK') tag = '[BREAKER]';
         else if (r.pivot_label === 'PP') tag = '[PP] ПІВОТ';
         else if (r.pivot_label) tag = `[${r.pivot_label}]`;
+        else if (r.smc_label === 'Supply') tag = '[SUPPLY]';
+        else tag = '[OB SUPPLY]';
 
         const badgeText = `${tag}${tfBadge}${r.touches > 1 ? ` x${r.touches}` : ''}${sc !== undefined ? ` S:${sc}` : ''}`;
         drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, badgeColor, 'right', theme);
@@ -767,14 +767,14 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const sc = s.strength_score !== undefined ? Math.round(s.strength_score) : undefined;
         const tfBadge = s.timeframe ? ` [${s.timeframe.replace('h', 'H').replace('d', 'D')}]` : '';
 
-        let tag = 'ПІДТРИМКА';
-        if (s.smc_label === 'OB Demand') tag = '[OB DEMAND]';
-        else if (s.smc_label === 'OB Supply') tag = '[OB SUPPLY]';
-        else if (s.smc_label === 'SSL') tag = '[SSL ЛІКВІДНІСТЬ]';
-        else if (s.smc_label === 'BSL') tag = '[BSL ЛІКВІДНІСТЬ]';
-        else if (s.smc_label === 'Breaker') tag = '[BREAKER]';
+        // Support Zone Label: Strictly Demand / SSL / Breaker
+        let tag = '[OB DEMAND]';
+        if (s.smc_label === 'SSL') tag = '[SSL ЛІКВІДНІСТЬ]';
+        else if (s.smc_label === 'Breaker' || s.smc_type === 'BREAKER_BLOCK') tag = '[BREAKER]';
         else if (s.pivot_label === 'PP') tag = '[PP] ПІВОТ';
         else if (s.pivot_label) tag = `[${s.pivot_label}]`;
+        else if (s.smc_label === 'Demand') tag = '[DEMAND]';
+        else tag = '[OB DEMAND]';
 
         const badgeText = `${tag}${tfBadge}${s.touches > 1 ? ` x${s.touches}` : ''}${sc !== undefined ? ` S:${sc}` : ''}`;
         drawBadge(ctx, badgeText, maxRightX - 8, minY + boxHeight / 2, badgeColor, 'right', theme);

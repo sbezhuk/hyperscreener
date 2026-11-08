@@ -118,6 +118,59 @@ class TestSMCLevels(unittest.TestCase):
             self.assertIn("bottom", lvl)
             self.assertIn("touches", lvl)
 
+    def test_smc_dealing_range_strict_separation_no_overlap(self):
+        """
+        Validates that resistances are strictly above current price,
+        supports are strictly below current price, and that resistance
+        and support can NEVER collide or occupy the same price level.
+        """
+        candles = []
+        t = 1000
+        for i in range(15):
+            candles.append({"time": t, "open": 2220 + (i % 5), "high": 2230 + (i % 4), "low": 2215 + (i % 3), "close": 2225 + (i % 4), "volume": 100})
+            t += 14400
+
+        candles.append({"time": t, "open": 2225, "high": 2235, "low": 2210, "close": 2232, "volume": 300}); t += 14400
+        candles.append({"time": t, "open": 2232, "high": 2260, "low": 2230, "close": 2258, "volume": 800}); t += 14400
+        candles.append({"time": t, "open": 2258, "high": 2285, "low": 2255, "close": 2280, "volume": 900}); t += 14400
+        candles.append({"time": t, "open": 2280, "high": 2298, "low": 2275, "close": 2292, "volume": 1200}); t += 14400
+        candles.append({"time": t, "open": 2292, "high": 2296, "low": 2282, "close": 2285, "volume": 1000}); t += 14400
+        candles.append({"time": t, "open": 2285, "high": 2288, "low": 2240, "close": 2242, "volume": 1500}); t += 14400
+        candles.append({"time": t, "open": 2242, "high": 2245, "low": 2218, "close": 2222, "volume": 1100}); t += 14400
+
+        for i in range(12):
+            candles.append({"time": t, "open": 2222 + (i % 4), "high": 2235 + (i % 3), "low": 2215 + (i % 3), "close": 2226, "volume": 150})
+            t += 14400
+
+        res = analyze_levels(candles, interval="4h")
+        current_price = res["currentPrice"]
+
+        self.assertGreater(len(res["resistances"]), 0)
+        self.assertGreater(len(res["supports"]), 0)
+
+        # 1. Strict resistance separation: bottom >= current_price
+        for r in res["resistances"]:
+            self.assertEqual(r["type"], "resistance")
+            self.assertGreater(r["price"], current_price)
+            self.assertGreaterEqual(r["bottom"], current_price)
+            self.assertIn(r.get("smc_label"), ("OB Supply", "BSL", "Breaker", "Supply"))
+
+        # 2. Strict support separation: top <= current_price
+        for s in res["supports"]:
+            self.assertEqual(s["type"], "support")
+            self.assertLess(s["price"], current_price)
+            self.assertLessEqual(s["top"], current_price)
+            self.assertIn(s.get("smc_label"), ("OB Demand", "SSL", "Breaker", "Demand"))
+
+        # 3. Non-collision invariant
+        lowest_resistance = res["resistances"][0]
+        highest_support = res["supports"][0]
+        self.assertGreater(
+            lowest_resistance["bottom"],
+            highest_support["top"],
+            "Resistance and Support cannot overlap or share the same price level"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
