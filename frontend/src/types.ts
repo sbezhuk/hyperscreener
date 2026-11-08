@@ -112,6 +112,37 @@ export interface FVGConfluenceItem {
   desc: string;
 }
 
+export interface StructuralContext {
+  contextAvailable: boolean;
+  context_available?: boolean;
+  unavailableReason?: string | null;
+  unavailable_reason?: string | null;
+  htfAlignment: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  htf_alignment?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
+  hasSupportConfluence: boolean;
+  has_support_confluence?: boolean;
+  confluentLineQ?: number | null;
+  confluent_line_q?: number | null;
+  distanceToSupportAtr?: number | null;
+  distance_to_support_atr?: number | null;
+  distanceToResistanceAtr?: number | null;
+  distance_to_resistance_atr?: number | null;
+  nearestSupportQ?: number | null;
+  nearest_support_q?: number | null;
+  nearestResistanceQ?: number | null;
+  nearest_resistance_q?: number | null;
+  isCompression: boolean;
+  is_compression?: boolean;
+  compressionRatio?: number | null;
+  compression_ratio?: number | null;
+  isRetest: boolean;
+  is_retest?: boolean;
+  riskFlags: string[];
+  risk_flags?: string[];
+  structuralTier: 'TIER_1_CONFLUENT' | 'TIER_2_STANDARD' | 'TIER_3_WARNING';
+  structural_tier?: 'TIER_1_CONFLUENT' | 'TIER_2_STANDARD' | 'TIER_3_WARNING';
+}
+
 export interface SignalItem {
   id: string;
   coin: string;
@@ -132,6 +163,7 @@ export interface SignalItem {
   oiDelta?: number | null;
   oiReason?: string;
   oiReasonDesc?: string;
+  strength?: number;
 
   // Trendline Structural Intelligence (Phase 1, 2, 4)
   structural_quality?: number;
@@ -148,6 +180,10 @@ export interface SignalItem {
   htfContext?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
   structural_risk_flags?: string[];
   structuralRiskFlags?: string[];
+
+  // Phase 5.2: Enriched Structural Context
+  structuralContext?: StructuralContext;
+  structural_context?: StructuralContext;
 }
 
 export interface OIDeltaItem {

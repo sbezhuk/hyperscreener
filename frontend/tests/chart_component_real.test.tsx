@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { chartSpies, resetSpies } from './mock_lightweight_charts';
 import { ThemeProvider } from '../src/context/ThemeContext';
 import { Chart } from '../src/components/Chart';
+import { SidebarLevels } from '../src/components/SidebarLevels';
 
 // 1. Set up simulated DOM environment for React Testing Library
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
@@ -304,5 +305,252 @@ describe('Chart.tsx Real Component Lifecycle & Rendering Tests', () => {
     assert.equal(chartSpies.setDataCalls.length, 1, 'Must NOT call setData() during live tick');
 
     unmount();
+  });
+});
+
+describe('SidebarLevels.tsx Trendline Structural Context Tests (Phase 5.2)', () => {
+  let rtlRender: any;
+
+  before(async () => {
+    const rtl = await import('@testing-library/react');
+    rtlRender = rtl.render;
+  });
+
+  const baseProps = {
+    resistances: [],
+    supports: [],
+    currentPrice: 2000.0,
+    cascades: [],
+    trendlines: [],
+    fvgs: [],
+    fvgConfluences: [],
+  };
+
+  test('1. Renders TIER_1_CONFLUENT badge and support metrics on Long Sweep signal', () => {
+    const signal: any = {
+      id: 'sweep-t1-1',
+      coin: 'ETH',
+      interval: '15m',
+      category: 'sweep',
+      title: 'Бичачий Sweep [2000]',
+      direction: 'LONG',
+      desc: 'Sweep of support level',
+      price: 2000.0,
+      time: 1700000000,
+      confirmationStatus: 'CONFIRMED',
+      structuralContext: {
+        contextAvailable: true,
+        htfAlignment: 'ALIGNED',
+        hasSupportConfluence: true,
+        confluentLineQ: 88.5,
+        distanceToSupportAtr: 0.25,
+        distanceToResistanceAtr: 3.1,
+        nearestSupportQ: 88.5,
+        nearestResistanceQ: 75.0,
+        isCompression: false,
+        compressionRatio: 1.1,
+        isRetest: false,
+        riskFlags: [],
+        structuralTier: 'TIER_1_CONFLUENT',
+      },
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          ...baseProps,
+          activeFormation: 'SWEEP',
+          signals: [signal],
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.match(text, /Збіг/i, 'Must render Confluent (Збіг) badge');
+    assert.match(text, /Підтримка Q:89/i, 'Must render support line quality rounded to integer');
+    assert.match(text, /0\.3 ATR/i, 'Must render distance to support line');
+    assert.match(text, /1h Збіг/i, 'Must render 1h HTF alignment indicator (1h Збіг)');
+  });
+
+  test('2. Renders TIER_3_WARNING badges (Against HTF and Compression)', () => {
+    const signal: any = {
+      id: 'sweep-t3-1',
+      coin: 'BTC',
+      interval: '15m',
+      category: 'sweep',
+      title: 'Бичачий Sweep проти тренду',
+      direction: 'LONG',
+      desc: 'Sweep under severe compression',
+      price: 64000.0,
+      time: 1700000000,
+      confirmationStatus: 'POTENTIAL',
+      structuralContext: {
+        contextAvailable: true,
+        htfAlignment: 'AGAINST_HTF',
+        hasSupportConfluence: false,
+        confluentLineQ: null,
+        distanceToSupportAtr: 1.4,
+        distanceToResistanceAtr: 0.8,
+        nearestSupportQ: 70.0,
+        nearestResistanceQ: 85.0,
+        isCompression: true,
+        compressionRatio: 0.52,
+        isRetest: false,
+        riskFlags: ['AGAINST_HTF', 'COMPRESSION'],
+        structuralTier: 'TIER_3_WARNING',
+      },
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          ...baseProps,
+          activeFormation: 'SWEEP',
+          signals: [signal],
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.match(text, /Проти HTF/i, 'Must render Проти HTF warning badge');
+    assert.match(text, /Стиснення/i, 'Must render Стиснення warning badge');
+    assert.match(text, /Проти 1h/i, 'Must render Проти 1h status');
+    assert.doesNotMatch(text, /Збіг/i, 'Must NOT render Збіг badge on Tier 3');
+  });
+
+  test('3. Renders TIER_2_STANDARD signal without warning badges or confluence badge', () => {
+    const signal: any = {
+      id: 'fvg-t2-1',
+      coin: 'SOL',
+      interval: '15m',
+      category: 'fvg',
+      title: 'Бичачий FVG',
+      direction: 'LONG',
+      desc: 'Normal FVG test',
+      price: 150.0,
+      time: 1700000000,
+      structuralContext: {
+        contextAvailable: true,
+        htfAlignment: 'NEUTRAL',
+        hasSupportConfluence: false,
+        confluentLineQ: null,
+        distanceToSupportAtr: 2.2,
+        distanceToResistanceAtr: 1.8,
+        nearestSupportQ: 74.0,
+        nearestResistanceQ: 78.0,
+        isCompression: false,
+        compressionRatio: 0.95,
+        isRetest: false,
+        riskFlags: [],
+        structuralTier: 'TIER_2_STANDARD',
+      },
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          ...baseProps,
+          activeFormation: 'FVG',
+          signals: [signal],
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.doesNotMatch(text, /Збіг/i, 'Must NOT render Confluent badge on standard Tier 2');
+    assert.doesNotMatch(text, /Проти HTF/i, 'Must NOT render Against HTF badge');
+    assert.doesNotMatch(text, /Стиснення/i, 'Must NOT render Compression badge');
+    assert.match(text, /Підтримка: 2\.2 ATR/i, 'Must render plain support distance');
+    assert.match(text, /Опір: 1\.8 ATR/i, 'Must render plain resistance distance');
+  });
+
+  test('4. Graceful fallback when contextAvailable is false', () => {
+    const signal: any = {
+      id: 'fvg-no-ctx',
+      coin: 'PUMP',
+      interval: '15m',
+      category: 'fvg',
+      title: 'Бичачий FVG без контексту',
+      direction: 'LONG',
+      desc: 'FVG test when HTF history is unavailable',
+      price: 0.005,
+      time: 1700000000,
+      structuralContext: {
+        contextAvailable: false,
+        unavailableReason: 'INSUFFICIENT_CANDLES',
+        htfAlignment: 'UNAVAILABLE',
+        hasSupportConfluence: false,
+        confluentLineQ: null,
+        distanceToSupportAtr: null,
+        distanceToResistanceAtr: null,
+        nearestSupportQ: null,
+        nearestResistanceQ: null,
+        isCompression: false,
+        compressionRatio: null,
+        isRetest: false,
+        riskFlags: [],
+        structuralTier: 'TIER_2_STANDARD',
+      },
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          ...baseProps,
+          activeFormation: 'SWEEP',
+          signals: [signal],
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.doesNotMatch(text, /Збіг/i);
+    assert.doesNotMatch(text, /Проти HTF/i);
+    assert.doesNotMatch(text, /Стиснення/i);
+    assert.doesNotMatch(text, /Підтримка/i, 'Should not render empty support distance row');
+  });
+
+  test('5. Backward compatibility with legacy signals lacking structuralContext', () => {
+    const legacySignal: any = {
+      id: 'legacy-sweep-1',
+      coin: 'MET',
+      interval: '15m',
+      category: 'sweep',
+      title: 'Legacy Sweep',
+      direction: 'LONG',
+      desc: 'Old signal format without structuralContext',
+      price: 45.0,
+      time: 1700000000,
+      confirmationStatus: 'CONFIRMED',
+      oiConfirmed: true,
+      oiDeltaPct: -3.5,
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          ...baseProps,
+          activeFormation: 'SWEEP',
+          signals: [legacySignal],
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.match(text, /Legacy Sweep/i, 'Must render legacy title cleanly');
+    assert.match(text, /ПІДТВЕРДЖЕНО/i, 'Must render legacy status');
+    assert.match(text, /-3\.500%/i, 'Must render legacy OI delta');
+    assert.doesNotMatch(text, /Збіг/i);
+    assert.doesNotMatch(text, /Проти HTF/i);
   });
 });

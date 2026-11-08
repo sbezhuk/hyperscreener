@@ -1,6 +1,6 @@
 import React from 'react';
 import { Timeframe, ConnectionState, WSConnectionDetails, OIData, formatOiDeltaPct } from '../types';
-import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Sun, Moon, Laptop, Power, Play, RefreshCcw, TrendingUp, TrendingDown, Minus, SlidersHorizontal } from 'lucide-react';
 import { useTheme, ThemePreference } from '../context/ThemeContext';
 
 interface TopBarProps {
@@ -15,6 +15,8 @@ interface TopBarProps {
   wsDetails?: WSConnectionDetails;
   onToggleWS?: () => void;
   oiData?: OIData;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -29,6 +31,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   wsDetails,
   onToggleWS,
   oiData,
+  onToggleSidebar,
+  isSidebarOpen,
 }) => {
   const { themePreference, resolvedTheme, setThemePreference } = useTheme();
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
@@ -61,21 +65,22 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   return (
-    <header className="h-14 px-4 bg-white dark:bg-[#0e1114] border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between select-none transition-colors">
+    <header className="h-14 px-2 sm:px-4 bg-white dark:bg-[#0e1114] border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between select-none transition-colors overflow-x-auto no-scrollbar gap-2">
       {/* Left: Back / Screener button and Coin Info */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
         <button
           onClick={onOpenScreener}
-          className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white px-2.5 py-1.5 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 transition"
+          className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white px-2 sm:px-2.5 py-1.5 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 transition flex-shrink-0"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span className="font-medium">Скрінер монет</span>
+          <span className="font-medium hidden sm:inline">Скрінер монет</span>
+          <span className="font-medium sm:hidden">Скрінер</span>
         </button>
 
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-mono">{coin}</span>
-          <span className="text-xs text-slate-500 dark:text-gray-400 font-medium hidden sm:inline">
-            USDT perpetual · Hyperliquid
+        <div className="flex items-baseline gap-1.5 sm:gap-2.5 flex-shrink-0">
+          <span className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white font-mono">{coin}</span>
+          <span className="text-xs text-slate-500 dark:text-gray-400 font-medium hidden md:inline">
+            USDT безстроковий · Hyperliquid
           </span>
           <button
             onClick={onToggleWS}
@@ -88,7 +93,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 ? 'Підключення не вдалося. Клікніть, щоб повторити спробу'
                 : 'Відключено вручну. Клікніть, щоб відновити підключення'
             }
-            className={`group flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded font-mono font-medium transition cursor-pointer hover:opacity-90 active:scale-95 ${
+            className={`group flex items-center gap-1.5 text-[10px] px-1.5 sm:px-2 py-0.5 rounded font-mono font-medium transition cursor-pointer hover:opacity-90 active:scale-95 flex-shrink-0 ${
               wsStatus === 'connected'
                 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20'
                 : wsStatus === 'reconnecting'
@@ -109,14 +114,23 @@ export const TopBar: React.FC<TopBarProps> = ({
                   : 'bg-slate-400'
               }`}
             />
-            <span>
+            <span className="hidden xs:inline">
               {wsStatus === 'connected'
-                ? 'WS LIVE'
+                ? 'WS НАЖИВО'
                 : wsStatus === 'reconnecting'
-                ? `RECONNECTING ${wsDetails?.attempt ? `#${wsDetails.attempt}` : ''}`
+                ? `ВІДНОВЛЕННЯ ${wsDetails?.attempt ? `#${wsDetails.attempt}` : ''}`
                 : wsStatus === 'failed'
-                ? 'FAILED'
-                : 'OFFLINE'}
+                ? 'ПОМИЛКА'
+                : 'ОФЛАЙН'}
+            </span>
+            <span className="xs:hidden">
+              {wsStatus === 'connected'
+                ? 'НАЖИВО'
+                : wsStatus === 'reconnecting'
+                ? 'РЕКОНЕКТ'
+                : wsStatus === 'failed'
+                ? 'ПОМИЛКА'
+                : 'ОФЛАЙН'}
             </span>
             {wsStatus === 'connected' ? (
               <Power className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-rose-500" />
@@ -129,7 +143,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Current Price */}
-        <div className="ml-2 font-mono text-xl font-semibold text-[#0ecb81]">
+        <div className="ml-1 sm:ml-2 font-mono text-base sm:text-xl font-semibold text-[#0ecb81] flex-shrink-0">
           {price > 0 ? (price < 1 ? price.toFixed(5) : price < 50 ? price.toFixed(3) : price.toFixed(2)) : '---'}
         </div>
 
@@ -137,7 +151,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {oiData && oiData.current_oi !== null && (
           <div
             title={`Hyperliquid OI: ${oiData.current_oi.toLocaleString()} ${coin} (${oiData.current_oi_usd ? '$' + (oiData.current_oi_usd >= 1e9 ? (oiData.current_oi_usd / 1e9).toFixed(2) + 'B' : oiData.current_oi_usd >= 1e6 ? (oiData.current_oi_usd / 1e6).toFixed(2) + 'M' : (oiData.current_oi_usd / 1e3).toFixed(1) + 'K') : ''}) | 1m: ${formatOiDeltaPct(oiData.deltas?.['1m']?.delta_pct)} | 5m: ${formatOiDeltaPct(oiData.deltas?.['5m']?.delta_pct)} | 15m: ${formatOiDeltaPct(oiData.deltas?.['15m']?.delta_pct)} | 1h: ${formatOiDeltaPct(oiData.deltas?.['1h']?.delta_pct)}`}
-            className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] text-xs font-mono ml-2 select-none"
+            className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] text-xs font-mono ml-2 select-none flex-shrink-0"
           >
             <span className="text-slate-400 dark:text-gray-500 font-sans text-[11px] font-medium">OI:</span>
             <span className="text-slate-800 dark:text-gray-200 font-semibold">
@@ -204,10 +218,21 @@ export const TopBar: React.FC<TopBarProps> = ({
         )}
       </div>
 
-      {/* Right: Theme Selector, Timeframe Selector & Actions */}
-      <div className="flex items-center gap-2">
-        {/* Theme Mode Switcher */}
-        <div className="flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5 text-xs">
+      {/* Right: Theme Selector, Timeframe Selector, Mobile Sidebar Toggle & Refresh */}
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        {/* Mobile Theme Toggle Button (1-click cycle on small screens) */}
+        <div className="sm:hidden flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5">
+          <button
+            onClick={handleToggleTheme}
+            className="p-1.5 rounded text-slate-700 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white transition"
+            title={getThemeTitle()}
+          >
+            {getThemeIcon()}
+          </button>
+        </div>
+
+        {/* Desktop Theme Mode Switcher (Light / Dark / Auto) */}
+        <div className="hidden sm:flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5 text-xs">
           <button
             onClick={() => setThemePreference('light')}
             className={`px-2 py-1 rounded flex items-center gap-1 font-medium transition ${
@@ -257,7 +282,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               <button
                 key={tf}
                 onClick={() => onTimeframeChange(tf)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded transition ${
+                className={`px-1.5 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded transition ${
                   isSelected
                     ? 'bg-white dark:bg-[#2b313a] text-slate-900 dark:text-white shadow-sm'
                     : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-200'
@@ -268,6 +293,21 @@ export const TopBar: React.FC<TopBarProps> = ({
             );
           })}
         </div>
+
+        {/* Mobile Sidebar Toggle Button */}
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className={`lg:hidden p-1.5 rounded border transition flex items-center gap-1 cursor-pointer ${
+              isSidebarOpen
+                ? 'bg-emerald-500/15 text-[#0ecb81] border-emerald-500/40'
+                : 'bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] text-slate-700 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+            title="Рівні та формації"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Refresh button */}
         <button

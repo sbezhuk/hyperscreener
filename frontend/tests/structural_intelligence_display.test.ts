@@ -100,8 +100,8 @@ test('Frontend Structural Intelligence Rendering Verification', async (t) => {
     const labels = drawCalls.filter((c) => c.type === 'fillText').map((c) => c.args[0]);
     // Must contain Q: 85
     assert.ok(labels.some((l) => l.includes('Q: 85')), 'Must draw Q: 85 indicator');
-    // Must contain [COMPRESSION]
-    assert.ok(labels.some((l) => l.includes('[COMPRESSION]')), 'Must draw [COMPRESSION] state badge');
+    // Must contain [СТИCНЕННЯ]
+    assert.ok(labels.some((l) => l.includes('[СТИCНЕННЯ]')), 'Must draw [СТИCНЕННЯ] state badge');
   });
 
   await t.test('2. Timeframe switching does not leak state or Q across timeframes', () => {
@@ -169,9 +169,9 @@ test('Frontend Structural Intelligence Rendering Verification', async (t) => {
 
     const labels = drawCalls.filter((c) => c.type === 'fillText').map((c) => c.args[0]);
     assert.ok(labels.some((l) => l.includes('Q: 71')), '1h chart must render Q: 71');
-    assert.ok(labels.some((l) => l.includes('[APPROACHING]')), '1h chart must render [APPROACHING]');
+    assert.ok(labels.some((l) => l.includes('[НАБЛИЖЕННЯ]')), '1h chart must render [НАБЛИЖЕННЯ]');
     assert.ok(!labels.some((l) => l.includes('Q: 92')), '1h chart MUST NOT render 15m Q: 92');
-    assert.ok(!labels.some((l) => l.includes('[BREAKOUT]')), '1h chart MUST NOT render 15m [BREAKOUT]');
+    assert.ok(!labels.some((l) => l.includes('[ПРОБІЙ]') || l.includes('[Пробита]')), '1h chart MUST NOT render 15m [Пробита]');
   });
 
   await t.test('3. Renders AGAINST HTF structural risk warning badge on chart canvas', () => {
@@ -222,7 +222,7 @@ test('Frontend Structural Intelligence Rendering Verification', async (t) => {
 
     const labels = drawCalls.filter((c) => c.type === 'fillText').map((c) => c.args[0]);
     assert.ok(labels.some((l) => l.includes('Q: 88')), 'Must render Q: 88');
-    assert.ok(labels.some((l) => l.includes('[TESTING]')), 'Must render [TESTING]');
-    assert.ok(labels.some((l) => l.includes('⚠️ AGAINST HTF')), 'Must render ⚠️ AGAINST HTF warning badge');
+    assert.ok(labels.some((l) => l.includes('[ТЕСТ]')), 'Must render [ТЕСТ]');
+    assert.ok(labels.some((l) => l.includes('⚠️ ПРОТИ HTF')), 'Must render ⚠️ ПРОТИ HTF warning badge');
   });
 });

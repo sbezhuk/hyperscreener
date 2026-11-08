@@ -204,7 +204,7 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white text-xs">{c.name}</span>
                     <span className="text-[10px] text-slate-400 dark:text-gray-500 ml-2 font-sans">
-                      Vol: ${(c.volume24h / 1_000_000).toFixed(1)}M
+                      Обсяг: ${(c.volume24h / 1_000_000).toFixed(1)}M
                     </span>
                   </div>
                   <div className="text-right">

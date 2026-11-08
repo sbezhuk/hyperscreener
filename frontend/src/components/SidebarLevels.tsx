@@ -1,6 +1,6 @@
 import React from 'react';
 import { LevelItem, SignalItem, AnalysisData, FormationFilter, OIData, formatOiDeltaPct } from '../types';
-import { Activity, BarChart2 } from 'lucide-react';
+import { Activity, BarChart2, X } from 'lucide-react';
 
 interface SidebarLevelsProps {
   resistances: LevelItem[];
@@ -13,6 +13,7 @@ interface SidebarLevelsProps {
   onSelectSignal?: (sig: SignalItem) => void;
   oiData?: OIData;
   onlyConfirmedOi?: boolean;
+  onClose?: () => void;
 }
 
 export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
@@ -26,6 +27,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   onSelectSignal,
   oiData,
   onlyConfirmedOi = false,
+  onClose,
 }) => {
   const filteredSignals = signals.filter((sig) => {
     if (activeFormation === 'NONE') return false;
@@ -45,7 +47,23 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   const allLevelsCount = resistances.length + supports.length;
 
   return (
-    <aside className="w-80 h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors">
+    <aside className="w-full lg:w-80 h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors">
+      
+      {/* Mobile Drawer Header with Close Button */}
+      {onClose && (
+        <div className="lg:hidden p-3 border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between bg-slate-100 dark:bg-[#15191e]">
+          <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs uppercase tracking-wider">
+            Рівні та формації
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-[#1e2329] text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition"
+            title="Закрити панель"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       
       {/* 1. Market Structure & Trend Header */}
       {structure && (
@@ -80,7 +98,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
               )}
               {fundingRate !== undefined && (
                 <div>
-                  <span className="text-slate-400 dark:text-gray-500">Funding: </span>
+                  <span className="text-slate-400 dark:text-gray-500">Фінансування: </span>
                   <span className={`font-mono font-medium ${fundingRate >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                     {(fundingRate * 100).toFixed(4)}%
                   </span>
@@ -126,7 +144,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
 
           {oiData?.current_oi_usd && (
             <div className="flex justify-between items-baseline text-[10px]">
-              <span className="text-slate-400 dark:text-gray-500">USD Notional: </span>
+              <span className="text-slate-400 dark:text-gray-500">Номінал USD: </span>
               <span className="text-slate-600 dark:text-gray-300 font-mono font-medium">
                 ${oiData.current_oi_usd >= 1e9
                   ? `${(oiData.current_oi_usd / 1e9).toFixed(2)}B`
@@ -289,7 +307,20 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                               : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
                           }`}
                         >
-                          {sig.interaction_state || sig.interactionState || 'ACTIVE'}
+                          {(() => {
+                            const state = sig.interaction_state || sig.interactionState || 'ACTIVE';
+                            const stateMap: Record<string, string> = {
+                              BREAKOUT: 'ПРОБІЙ',
+                              RETEST: 'РЕТЕСТ',
+                              COMPRESSION: 'СТИCНЕННЯ',
+                              TESTING: 'ТЕСТ',
+                              REJECTED: 'ВІДХИЛЕНО',
+                              APPROACHING: 'НАБЛИЖЕННЯ',
+                              STALE: 'ЗАСТАРІЛА',
+                              ACTIVE: 'АКТИВНА',
+                            };
+                            return stateMap[state] || state;
+                          })()}
                         </span>
                         {(sig.htf_context || sig.htfContext) && (sig.htf_context !== 'UNAVAILABLE' && sig.htfContext !== 'UNAVAILABLE') && (
                           <span
@@ -321,12 +352,43 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                         }`}
                       >
                         {sig.confirmationStatus === 'CONFIRMED'
-                          ? 'CONFIRMED'
+                          ? 'ПІДТВЕРДЖЕНО'
                           : sig.confirmationStatus === 'POTENTIAL'
-                          ? 'POTENTIAL'
-                          : 'UNCONFIRMED'}
+                          ? 'ПОТЕНЦІЙНИЙ'
+                          : 'НЕПІДТВЕРДЖЕНО'}
                       </span>
                     )}
+
+                    {/* Phase 5.2: Structural Context Tier / Warning Badges */}
+                    {(() => {
+                      const ctx = sig.structuralContext || sig.structural_context;
+                      if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
+                      const isTier1 = ctx.structuralTier === 'TIER_1_CONFLUENT' || ctx.structural_tier === 'TIER_1_CONFLUENT' || ctx.hasSupportConfluence || ctx.has_support_confluence;
+                      const flags = ctx.riskFlags || ctx.risk_flags || [];
+                      const isAgainstHtf = flags.includes('AGAINST_HTF') || ctx.htfAlignment === 'AGAINST_HTF' || ctx.htf_alignment === 'AGAINST_HTF';
+                      const isComp = flags.includes('COMPRESSION') || ctx.isCompression || ctx.is_compression;
+
+                      return (
+                        <div className="flex items-center gap-1">
+                          {isTier1 && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30">
+                              🛡️ Збіг
+                            </span>
+                          )}
+                          {isAgainstHtf && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-500/20 text-[#f6465d] border border-rose-500/30">
+                              ⚠️ Проти HTF
+                            </span>
+                          )}
+                          {isComp && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                              ⚡ Стиснення
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     <span
                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
                         sig.direction === 'LONG'
@@ -349,6 +411,46 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                     </span>
                   </div>
                 )}
+
+                {/* Phase 5.2: Enriched Structural Context row for Non-Trendline Signals */}
+                {sig.category !== 'trendline' && (() => {
+                  const ctx = sig.structuralContext || sig.structural_context;
+                  if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
+                  const hasSup = ctx.hasSupportConfluence || ctx.has_support_confluence;
+                  const supDist = ctx.distanceToSupportAtr ?? ctx.distance_to_support_atr;
+                  const resDist = ctx.distanceToResistanceAtr ?? ctx.distance_to_resistance_atr;
+                  const supQ = ctx.confluentLineQ ?? ctx.confluent_line_q ?? ctx.nearestSupportQ ?? ctx.nearest_support_q;
+                  const htf = ctx.htfAlignment ?? ctx.htf_alignment;
+
+                  if ((supDist === null || supDist === undefined) && (resDist === null || resDist === undefined) && (!htf || htf === 'UNAVAILABLE')) {
+                    return null;
+                  }
+
+                  return (
+                    <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-slate-500 dark:text-gray-400">
+                      <div className="flex items-center gap-1.5 truncate">
+                        {hasSup ? (
+                          <span className="text-[#0ecb81] font-semibold">
+                            Підтримка Q:{Math.round(supQ ?? 80)} ({supDist !== null && supDist !== undefined ? supDist.toFixed(1) : '0.0'} ATR)
+                          </span>
+                        ) : supDist !== null && supDist !== undefined ? (
+                          <span>Підтримка: {supDist.toFixed(1)} ATR</span>
+                        ) : null}
+                        {resDist !== null && resDist !== undefined && (
+                          <span>Опір: {resDist.toFixed(1)} ATR</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {htf === 'ALIGNED' && (
+                          <span className="text-[#0ecb81] text-[9px] font-bold">1h Збіг</span>
+                        )}
+                        {htf === 'AGAINST_HTF' && (
+                          <span className="text-[#f6465d] text-[9px] font-bold">Проти 1h</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {sig.category === 'trendline' && (
                   <div className="flex flex-col gap-1 py-1 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-[10px] font-mono text-slate-500 dark:text-gray-400">

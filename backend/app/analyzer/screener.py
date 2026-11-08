@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 from ..hyperliquid import hl_client
 from ..ws_manager import hl_ws_manager
 from .oi_tracker import oi_manager
@@ -8,9 +8,315 @@ from .mtf_levels import mtf_levels_manager
 from .fvg import detect_fvgs
 from .mtf_fvg import mtf_fvg_manager
 from .liquidity import detect_liquidity_and_sweeps
-from .trendline import detect_timeframe_trendlines
-from .mtf_trendline import mtf_trendline_manager
+from .trendline import (
+    detect_timeframe_trendlines,
+    calculate_atr,
+    evaluate_htf_structural_context,
+    DEFAULT_COMPRESSION_THRESHOLD,
+)
+from .mtf_trendline import mtf_trendline_manager, HTF_TIMEFRAME_MAP
 from .structure import analyze_market_structure
+
+
+def _get_trendline_price_at_bar(tl: Dict[str, Any], target_bar_idx: int) -> float:
+    """Helper to determine the modeled price of a trendline at target_bar_idx."""
+    p1 = tl.get("start_point") or tl.get("p1") or {}
+    idx1 = p1.get("index", 0)
+    p1_price = float(p1.get("price", 0.0))
+    slope = float(tl.get("slope", 0.0))
+    if slope != 0.0 or idx1 != 0:
+        return p1_price + slope * (target_bar_idx - idx1)
+    p2 = tl.get("end_point") or tl.get("p2") or {}
+    return float(tl.get("price") or p2.get("price") or p1_price)
+
+
+def _select_nearest_trendline(
+    lines: List[Dict[str, Any]],
+    target_price: float,
+    curr_bar_idx: int,
+    atr: float,
+) -> Optional[Tuple[Dict[str, Any], float]]:
+    """
+    Deterministically selects the nearest trendline to target_price.
+    Tie-breaking hierarchy:
+      1. Minimum distance in ATR.
+      2. Higher Structural Quality Q.
+      3. Newer P2 timestamp.
+    Returns: (best_trendline, dist_atr) or None.
+    """
+    if not lines:
+        return None
+
+    scored_lines = []
+    for tl in lines:
+        lp = _get_trendline_price_at_bar(tl, curr_bar_idx)
+        dist_atr = abs(target_price - lp) / max(atr, 1e-6)
+        q = float(tl.get("structural_quality", tl.get("strength", 50.0)))
+        p2 = tl.get("end_point") or tl.get("p2") or {}
+        p2_time = int(p2.get("time", 0))
+        scored_lines.append(((dist_atr, -q, -p2_time), tl, dist_atr))
+
+    scored_lines.sort(key=lambda item: item[0])
+    best_item = scored_lines[0]
+    return best_item[1], best_item[2]
+
+
+def enrich_signals_with_trendline_context(
+    signals: List[Dict[str, Any]],
+    active_trendlines: List[Dict[str, Any]],
+    candles: List[Dict[str, Any]],
+    interval: str,
+    coin: Optional[str] = None,
+    htf_candles: Optional[List[Dict[str, Any]]] = None,
+    atr_period: int = 14,
+    compression_threshold: float = DEFAULT_COMPRESSION_THRESHOLD,
+) -> List[Dict[str, Any]]:
+    """
+    Enriches each signal in-place with descriptive Trendline Structural Context (Phase 5.2).
+    Pure enrichment: does not filter, delete, or alter existing signal fields.
+    """
+    if not signals:
+        return signals
+
+    # Fallback template if candles or history are insufficient
+    def make_fallback(reason: str) -> Dict[str, Any]:
+        return {
+            "contextAvailable": False,
+            "context_available": False,
+            "unavailableReason": reason,
+            "unavailable_reason": reason,
+            "htfAlignment": "UNAVAILABLE",
+            "htf_alignment": "UNAVAILABLE",
+            "hasSupportConfluence": False,
+            "has_support_confluence": False,
+            "confluentLineQ": None,
+            "confluent_line_q": None,
+            "distanceToSupportAtr": None,
+            "distance_to_support_atr": None,
+            "distanceToResistanceAtr": None,
+            "distance_to_resistance_atr": None,
+            "nearestSupportQ": None,
+            "nearest_support_q": None,
+            "nearestResistanceQ": None,
+            "nearest_resistance_q": None,
+            "isCompression": False,
+            "is_compression": False,
+            "compressionRatio": None,
+            "compression_ratio": None,
+            "isRetest": False,
+            "is_retest": False,
+            "riskFlags": [],
+            "risk_flags": [],
+            "structuralTier": "TIER_2_STANDARD",
+            "structural_tier": "TIER_2_STANDARD",
+        }
+
+    if not candles or len(candles) < max(atr_period, 5):
+        fallback = make_fallback("INSUFFICIENT_CANDLES")
+        for sig in signals:
+            sig["structuralContext"] = fallback
+            sig["structural_context"] = fallback
+        return signals
+
+    try:
+        atr = calculate_atr(candles, atr_period)
+        if atr <= 0:
+            fallback = make_fallback("INVALID_ATR")
+            for sig in signals:
+                sig["structuralContext"] = fallback
+                sig["structural_context"] = fallback
+            return signals
+
+        n_candles = len(candles)
+        curr_c = candles[-1]
+        curr_price = float(curr_c["close"])
+        curr_bar_idx = n_candles - 1
+
+        # Resolve HTF candles strictly from cache if not explicitly provided
+        clean_tf = interval.lower()
+        if htf_candles is None and coin:
+            htf_tf = HTF_TIMEFRAME_MAP.get(clean_tf)
+            if htf_tf:
+                htf_candles = mtf_trendline_manager.get_cached_candles(coin.upper(), htf_tf)
+
+        # Evaluate HTF market structure context strictly Point-in-Time
+        is_closed = bool(curr_c.get("is_closed", True))
+        candle_time = int(curr_c.get("time", 0))
+        explicit_eval_time = curr_c.get("evaluation_time")
+
+        support_htf_ctx = evaluate_htf_structural_context(
+            line_type="support_trendline",
+            candle_time=candle_time,
+            htf_candles=htf_candles,
+            evaluation_time=explicit_eval_time,
+            is_candle_closed=is_closed,
+            ltf_interval=clean_tf,
+        )
+
+        # Volatility Compression
+        sub5 = candles[max(0, n_candles - 5):]
+        sub20 = candles[max(0, n_candles - 20):]
+        a5 = calculate_atr(sub5, 5)
+        a20 = calculate_atr(sub20, 20)
+        local_comp_ratio = round(a5 / a20, 3) if a20 > 0 else 1.0
+        is_local_comp = (local_comp_ratio < compression_threshold)
+
+        # Separate active trendlines
+        all_lines = active_trendlines or []
+        support_lines = [
+            tl for tl in all_lines
+            if "support" in tl.get("line_type", tl.get("type", "")) and tl.get("status") != "BROKEN"
+        ]
+        resistance_lines = [
+            tl for tl in all_lines
+            if "res" in tl.get("line_type", tl.get("type", "")) and tl.get("status") != "BROKEN"
+        ]
+
+        for sig in signals:
+            try:
+                sig_price = float(sig.get("price") if sig.get("price") is not None else curr_price)
+                direction = sig.get("direction", "NEUTRAL")
+                category = sig.get("category", "")
+
+                # Deterministic selection
+                best_sup_res = _select_nearest_trendline(support_lines, sig_price, curr_bar_idx, atr)
+                best_res_res = _select_nearest_trendline(resistance_lines, sig_price, curr_bar_idx, atr)
+
+                # Distance & quality metrics
+                if best_sup_res is not None:
+                    nearest_sup, sup_dist_atr = best_sup_res
+                    distance_to_support_atr = round(sup_dist_atr, 2)
+                    nearest_support_q = round(float(nearest_sup.get("structural_quality", nearest_sup.get("strength", 50.0))), 1)
+                    sup_comp = (
+                        nearest_sup.get("compression_ratio", 1.0) < compression_threshold or
+                        nearest_sup.get("interaction_state") == "COMPRESSION"
+                    )
+                else:
+                    nearest_sup = None
+                    distance_to_support_atr = None
+                    nearest_support_q = None
+                    sup_comp = False
+
+                if best_res_res is not None:
+                    nearest_res, res_dist_atr = best_res_res
+                    distance_to_resistance_atr = round(res_dist_atr, 2)
+                    nearest_resistance_q = round(float(nearest_res.get("structural_quality", nearest_res.get("strength", 50.0))), 1)
+                    res_comp = (
+                        nearest_res.get("compression_ratio", 1.0) < compression_threshold or
+                        nearest_res.get("interaction_state") == "COMPRESSION"
+                    )
+                    res_is_retest = (
+                        nearest_res.get("interaction_state") == "RETEST" or
+                        nearest_res.get("status") == "RETEST"
+                    )
+                else:
+                    nearest_res = None
+                    distance_to_resistance_atr = None
+                    nearest_resistance_q = None
+                    res_comp = False
+                    res_is_retest = False
+
+                # Signal HTF alignment
+                if direction == "LONG":
+                    htf_alignment = support_htf_ctx
+                elif direction == "SHORT":
+                    if support_htf_ctx == "ALIGNED":
+                        htf_alignment = "AGAINST_HTF"
+                    elif support_htf_ctx == "AGAINST_HTF":
+                        htf_alignment = "ALIGNED"
+                    else:
+                        htf_alignment = support_htf_ctx
+                else:
+                    htf_alignment = "NEUTRAL"
+
+                # Support confluence (LONG Sweep / FVG, Q >= 80, dist <= 0.50 ATR)
+                has_support_confluence = False
+                confluent_line_q = None
+                if direction == "LONG" and distance_to_support_atr is not None and nearest_support_q is not None:
+                    if distance_to_support_atr <= 0.50 and nearest_support_q >= 80.0:
+                        has_support_confluence = True
+                        confluent_line_q = nearest_support_q
+
+                # Compression & Retest
+                is_compression = is_local_comp or sup_comp or res_comp
+                compression_ratio = local_comp_ratio
+                is_retest = res_is_retest or (
+                    nearest_sup is not None and (
+                        nearest_sup.get("interaction_state") == "RETEST" or
+                        nearest_sup.get("status") == "RETEST"
+                    )
+                )
+
+                # Risk flags
+                risk_flags: List[str] = []
+                if htf_alignment == "AGAINST_HTF":
+                    risk_flags.append("AGAINST_HTF")
+                if is_compression:
+                    risk_flags.append("COMPRESSION")
+                if (nearest_res and (nearest_res.get("interaction_state") == "BREAKOUT" or nearest_res.get("status") == "BROKEN")) or \
+                   (nearest_sup and (nearest_sup.get("interaction_state") == "BREAKOUT" or nearest_sup.get("status") == "BROKEN")):
+                    risk_flags.append("BREAKOUT")
+                if is_retest:
+                    risk_flags.append("RETEST")
+                if (nearest_res and (nearest_res.get("interaction_state") == "STALE" or nearest_res.get("status") == "STALE")) or \
+                   (nearest_sup and (nearest_sup.get("interaction_state") == "STALE" or nearest_sup.get("status") == "STALE")):
+                    risk_flags.append("STALE")
+
+                # Classification rules (Phase 5.2):
+                # TIER_3_WARNING: AGAINST_HTF or COMPRESSION
+                # TIER_1_CONFLUENT: LONG Sweep or FVG, support within 0.50 ATR, Q >= 80
+                # TIER_2_STANDARD: default
+                if "AGAINST_HTF" in risk_flags or "COMPRESSION" in risk_flags:
+                    structural_tier = "TIER_3_WARNING"
+                elif has_support_confluence and (category in ["sweep", "fvg"] or direction == "LONG"):
+                    structural_tier = "TIER_1_CONFLUENT"
+                else:
+                    structural_tier = "TIER_2_STANDARD"
+
+                context_dict = {
+                    "contextAvailable": True,
+                    "context_available": True,
+                    "unavailableReason": None,
+                    "unavailable_reason": None,
+                    "htfAlignment": htf_alignment,
+                    "htf_alignment": htf_alignment,
+                    "hasSupportConfluence": has_support_confluence,
+                    "has_support_confluence": has_support_confluence,
+                    "confluentLineQ": confluent_line_q,
+                    "confluent_line_q": confluent_line_q,
+                    "distanceToSupportAtr": distance_to_support_atr,
+                    "distance_to_support_atr": distance_to_support_atr,
+                    "distanceToResistanceAtr": distance_to_resistance_atr,
+                    "distance_to_resistance_atr": distance_to_resistance_atr,
+                    "nearestSupportQ": nearest_support_q,
+                    "nearest_support_q": nearest_support_q,
+                    "nearestResistanceQ": nearest_resistance_q,
+                    "nearest_resistance_q": nearest_resistance_q,
+                    "isCompression": is_compression,
+                    "is_compression": is_compression,
+                    "compressionRatio": compression_ratio,
+                    "compression_ratio": compression_ratio,
+                    "isRetest": is_retest,
+                    "is_retest": is_retest,
+                    "riskFlags": risk_flags,
+                    "risk_flags": risk_flags,
+                    "structuralTier": structural_tier,
+                    "structural_tier": structural_tier,
+                }
+                sig["structuralContext"] = context_dict
+                sig["structural_context"] = context_dict
+            except Exception as item_err:
+                fb = make_fallback(f"SIGNAL_ENRICHMENT_ERROR: {str(item_err)}")
+                sig["structuralContext"] = fb
+                sig["structural_context"] = fb
+
+    except Exception as main_err:
+        fb = make_fallback(f"PIPELINE_ERROR: {str(main_err)}")
+        for sig in signals:
+            sig["structuralContext"] = fb
+            sig["structural_context"] = fb
+
+    return signals
 
 async def analyze_coin_data(
     coin: str,
@@ -273,6 +579,15 @@ async def analyze_coin_data(
             "scenario": bs.get("scenario"),
             "badgeColor": bs.get("badge_color")
         })
+
+    # 7. Enrich signals with Trendline Structural Context (Phase 5.2)
+    signals = enrich_signals_with_trendline_context(
+        signals=signals,
+        active_trendlines=active_tls,
+        candles=candles,
+        interval=interval,
+        coin=coin,
+    )
 
     return {
         "coin": coin,

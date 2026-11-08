@@ -270,6 +270,17 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           stateColor = '#64748b';
         }
 
+        const stateLabelsUk: Record<string, string> = {
+          BREAKOUT: 'ПРОБІЙ',
+          RETEST: 'РЕТЕСТ',
+          COMPRESSION: 'СТИCНЕННЯ',
+          TESTING: 'ТЕСТ',
+          REJECTED: 'ВІДХИЛЕНО',
+          APPROACHING: 'НАБЛИЖЕННЯ',
+          STALE: 'ЗАСТАРІЛА',
+          ACTIVE: 'АКТИВНА',
+        };
+
         // Display label: includes line label, timeframe, and state badge
         let displayLabel = tl.timeframe_label || tl.label || 'Наклонка';
         if (isBroken || stateLabel === 'BREAKOUT') {
@@ -277,7 +288,8 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         } else if (isForming || stateLabel === 'FORMING') {
           displayLabel += ' [Формується]';
         } else if (stateLabel && stateLabel !== 'ACTIVE') {
-          displayLabel += ` [${stateLabel}]`;
+          const ukState = stateLabelsUk[stateLabel] || stateLabel;
+          displayLabel += ` [${ukState}]`;
         }
 
         // Measure badge widths to layout badges adjacent to each other from right to left
@@ -299,7 +311,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
         const riskFlags = tl.structuralRiskFlags || tl.structural_risk_flags || [];
         const isAgainstHtf = riskFlags.includes('AGAINST_HTF') || tl.htfContext === 'AGAINST_HTF' || tl.htf_context === 'AGAINST_HTF';
         if (isAgainstHtf) {
-          const warningLabel = '⚠️ AGAINST HTF';
+          const warningLabel = '⚠️ ПРОТИ HTF';
           drawBadge(ctx, warningLabel, rightOffset, extendY, '#ef4444', 'right', theme);
         }
       });

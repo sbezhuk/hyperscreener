@@ -29,6 +29,7 @@ export function App() {
   const [isLoadingEarlier, setIsLoadingEarlier] = useState<boolean>(false);
   const [isScreenerLoading, setIsScreenerLoading] = useState<boolean>(false);
   const [isScreenerOpen, setIsScreenerOpen] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [wsStatus, setWsStatus] = useState<ConnectionState>('disconnected');
   const [wsDetails, setWsDetails] = useState<WSConnectionDetails>({ state: 'disconnected' });
   const isManualDisconnectRef = useRef<boolean>(false);
@@ -849,6 +850,8 @@ export function App() {
         wsDetails={wsDetails}
         onToggleWS={handleToggleWS}
         oiData={analysis?.oi}
+        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+        isSidebarOpen={isMobileSidebarOpen}
       />
 
       {/* Formations & Multi-Timeframe Filter Bar */}
@@ -902,19 +905,51 @@ export function App() {
           )}
         </main>
 
-        {/* Right Sidebar with Levels and Formations */}
-        <SidebarLevels
-          resistances={filteredResistances}
-          supports={filteredSupports}
-          signals={analysis?.signals || []}
-          structure={analysis?.structure}
-          openInterest={currentCoinMeta?.openInterest}
-          fundingRate={currentCoinMeta?.fundingRate}
-          activeFormation={activeFormation}
-          onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
-          oiData={analysis?.oi}
-          onlyConfirmedOi={onlyConfirmedOi}
-        />
+        {/* Right Sidebar Desktop View (lg and wider) */}
+        <div className="hidden lg:flex lg:flex-shrink-0">
+          <SidebarLevels
+            resistances={filteredResistances}
+            supports={filteredSupports}
+            signals={analysis?.signals || []}
+            structure={analysis?.structure}
+            openInterest={currentCoinMeta?.openInterest}
+            fundingRate={currentCoinMeta?.fundingRate}
+            activeFormation={activeFormation}
+            onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
+            oiData={analysis?.oi}
+            onlyConfirmedOi={onlyConfirmedOi}
+          />
+        </div>
+
+        {/* Right Sidebar Mobile Slide-over Drawer (< lg) */}
+        {isMobileSidebarOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 flex justify-end">
+            {/* Backdrop overlay */}
+            <div
+              className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            {/* Drawer container */}
+            <div className="relative w-80 max-w-[85vw] h-full shadow-2xl z-50 animate-in slide-in-from-right duration-200">
+              <SidebarLevels
+                resistances={filteredResistances}
+                supports={filteredSupports}
+                signals={analysis?.signals || []}
+                structure={analysis?.structure}
+                openInterest={currentCoinMeta?.openInterest}
+                fundingRate={currentCoinMeta?.fundingRate}
+                activeFormation={activeFormation}
+                onSelectSignal={(sig) => {
+                  handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category);
+                  setIsMobileSidebarOpen(false);
+                }}
+                oiData={analysis?.oi}
+                onlyConfirmedOi={onlyConfirmedOi}
+                onClose={() => setIsMobileSidebarOpen(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Screener Modal / Drawer */}
