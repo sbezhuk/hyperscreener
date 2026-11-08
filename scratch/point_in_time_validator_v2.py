@@ -14,11 +14,16 @@ from app.analyzer.trendline import (
     calculate_atr,
     TIMEFRAME_SWING_CONFIG,
 )
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+    resolve_research_timeframes,
+)
 
 HORIZON = 15  # Forward evaluation horizon in bars
 TRAIN_RATIO = 0.65  # 65% In-Sample, 35% Out-of-Sample
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h"]
 BOOTSTRAP_REPLICATIONS = 1000
 RANDOM_SEED = 42
 
@@ -433,9 +438,15 @@ async def run_v2_audit():
     all_events = []
     look_ahead_violations = 0
     
-    for coin in COINS:
-        for tf in TIMEFRAMES:
-            candles = await hl_client.get_candles(coin=coin, interval=tf, limit=1200)
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["15m", "1h"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
+    for coin in target_coins:
+        for tf in target_tfs:
+            ds = await get_single_dataset(coin=coin, timeframe=tf, limit=1200)
+            candles = ds["candles"]
             if not candles or len(candles) < 300:
                 continue
                 
@@ -549,9 +560,9 @@ async def run_v2_audit():
     print("-" * 85)
     
     subgroups = {}
-    for c in COINS:
+    for c in target_coins:
         subgroups[f"Asset: {c}"] = [e for e in oos_events if e["coin"] == c]
-    for tf in TIMEFRAMES:
+    for tf in target_tfs:
         subgroups[f"TF: {tf}"] = [e for e in oos_events if e["tf"] == tf]
     subgroups["Direction: Support"] = [e for e in oos_events if e["type"] == "support_trendline"]
     subgroups["Direction: Resistance"] = [e for e in oos_events if e["type"] == "resistance_trendline"]

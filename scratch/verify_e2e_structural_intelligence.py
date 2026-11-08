@@ -8,21 +8,22 @@ from app.hyperliquid import hl_client
 from app.analyzer.trendline import detect_timeframe_trendlines
 from app.analyzer.mtf_trendline import mtf_trendline_manager
 from app.analyzer.screener import analyze_coin_data
-
-TEST_COINS = ["BTC", "ETH", "SOL", "PUMP"]
-TEST_TFS = ["15m", "1h", "4h"]
+from app.research.pipeline import resolve_research_coins, resolve_research_timeframes
 
 async def run_e2e_verification():
     print("=" * 85)
     print("🚀 E2E VERIFICATION: REAL MARKET CANDLES & STRUCTURAL INTELLIGENCE")
     print("=" * 85)
 
+    test_coins = await resolve_research_coins(min_volume_usd=10_000_000, top_n=5)
+    test_tfs = resolve_research_timeframes()
+
     total_lines = 0
     state_counts = {}
     q_scores = []
 
-    for coin in TEST_COINS:
-        for tf in TEST_TFS:
+    for coin in test_coins:
+        for tf in test_tfs:
             candles = await hl_client.get_candles(coin=coin, interval=tf, limit=500)
             if not candles or len(candles) < 30:
                 print(f"Skipping {coin} {tf}: insufficient candles")

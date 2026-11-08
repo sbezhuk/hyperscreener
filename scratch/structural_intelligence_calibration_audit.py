@@ -16,9 +16,14 @@ from app.analyzer.trendline import (
     TIMEFRAME_SWING_CONFIG,
     DEFAULT_COMPRESSION_THRESHOLD,
 )
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+    resolve_research_timeframes,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h", "4h"]
 BOOTSTRAP_REPLICATIONS = 1000
 RANDOM_SEED = 42
 
@@ -56,9 +61,15 @@ async def run_calibration_audit():
     # Track compression events across history
     compression_study_events = []
 
-    for coin in COINS:
-        for tf in TIMEFRAMES:
-            candles = await hl_client.get_candles(coin=coin, interval=tf, limit=1200)
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["15m", "1h", "4h"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
+    for coin in target_coins:
+        for tf in target_tfs:
+            ds = await get_single_dataset(coin=coin, timeframe=tf, limit=1200)
+            candles = ds["candles"]
             if not candles or len(candles) < 100:
                 continue
 
@@ -178,7 +189,7 @@ async def run_calibration_audit():
 
     # Breakdown by Asset & Timeframe
     print("\nBreakdown by Asset (Mean Q & Sample):")
-    for c in COINS:
+    for c in target_coins:
         c_lines = [l for l in all_candidate_lines if l["coin"] == c]
         if c_lines:
             c_q = [l["structural_quality"] for l in c_lines]

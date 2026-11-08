@@ -12,9 +12,14 @@ from app.analyzer.trendline import (
     calculate_atr,
     TIMEFRAME_SWING_CONFIG,
 )
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+    resolve_research_timeframes,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h"]
 THRESHOLDS = [0.55, 0.65, 0.75, 0.85]
 HORIZON = 15
 
@@ -102,9 +107,15 @@ async def run_compression_study():
         for th in THRESHOLDS
     }
 
-    for coin in COINS:
-        for tf in TIMEFRAMES:
-            candles = await hl_client.get_candles(coin=coin, interval=tf, limit=1200)
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["15m", "1h"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
+    for coin in target_coins:
+        for tf in target_tfs:
+            ds = await get_single_dataset(coin=coin, timeframe=tf, limit=1200)
+            candles = ds["candles"]
             if not candles or len(candles) < 300: continue
             n = len(candles)
 

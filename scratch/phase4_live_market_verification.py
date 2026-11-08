@@ -5,9 +5,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend")))
 
 from app.analyzer.screener import analyze_coin_data
-
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h", "4h"]
+from research_pipeline import resolve_research_coins, resolve_research_timeframes
 
 
 async def main():
@@ -15,13 +13,18 @@ async def main():
     print("PHASE 4: LIVE MARKET VERIFICATION & STRUCTURAL RISK AUDIT")
     print("=" * 100)
 
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["15m", "1h", "4h"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
     total_lines = 0
     htf_counts = {"ALIGNED": 0, "AGAINST_HTF": 0, "NEUTRAL": 0, "UNAVAILABLE": 0}
     risk_flag_counts = {}
 
-    for coin in COINS:
+    for coin in target_coins:
         print(f"\n--- AUDITING COIN: {coin} ---")
-        for tf in TIMEFRAMES:
+        for tf in target_tfs:
             try:
                 result = await analyze_coin_data(
                     coin=coin,

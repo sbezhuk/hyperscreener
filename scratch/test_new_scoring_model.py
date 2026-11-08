@@ -211,8 +211,9 @@ def evaluate_adaptive_quality(candles, tl, atr):
 
 async def run_simulation():
     from app.analyzer.trendline import detect_timeframe_trendlines
-    coins = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-    tfs = ["5m", "15m", "1h", "4h", "1d"]
+    from app.research.pipeline import resolve_research_coins, resolve_research_timeframes
+    coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=5)
+    tfs = resolve_research_timeframes()
 
     histogram_new = defaultdict(int)
     cat_counts = defaultdict(int)

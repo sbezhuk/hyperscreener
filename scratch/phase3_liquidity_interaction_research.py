@@ -13,9 +13,14 @@ from app.analyzer.trendline import (
     find_swings_for_trendlines,
     TIMEFRAME_SWING_CONFIG,
 )
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+    resolve_research_timeframes,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h"]
 HORIZON = 15
 BOOTSTRAP_REPLICATIONS = 1000
 RANDOM_SEED = 42
@@ -111,9 +116,15 @@ async def run_liquidity_interaction_research():
 
     all_events = []
 
-    for coin in COINS:
-        for tf in TIMEFRAMES:
-            candles = await hl_client.get_candles(coin=coin, interval=tf, limit=1200)
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["15m", "1h"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
+    for coin in target_coins:
+        for tf in target_tfs:
+            ds = await get_single_dataset(coin=coin, timeframe=tf, limit=1200)
+            candles = ds["candles"]
             if not candles or len(candles) < 200: continue
             n = len(candles)
             train_cutoff = int(n * 0.65)

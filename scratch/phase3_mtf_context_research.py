@@ -14,8 +14,13 @@ from app.analyzer.trendline import (
     TIMEFRAME_SWING_CONFIG,
 )
 from app.analyzer.structure import analyze_market_structure
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
 BASE_TF = "15m"
 HTF_LIST = ["1h", "4h", "1d"]
 HORIZON = 15
@@ -113,11 +118,17 @@ async def run_mtf_research():
 
     all_events = []
 
-    for coin in COINS:
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    print(f"Universally discovered assets: {target_coins}")
+
+    for coin in target_coins:
         print(f"Fetching MTF candle datasets for {coin}...")
-        c_15m = await hl_client.get_candles(coin=coin, interval="15m", limit=1200)
-        c_1h = await hl_client.get_candles(coin=coin, interval="1h", limit=600)
-        c_4h = await hl_client.get_candles(coin=coin, interval="4h", limit=300)
+        ds_15m = await get_single_dataset(coin=coin, timeframe="15m", limit=1200)
+        ds_1h = await get_single_dataset(coin=coin, timeframe="1h", limit=600)
+        ds_4h = await get_single_dataset(coin=coin, timeframe="4h", limit=300)
+        c_15m = ds_15m["candles"]
+        c_1h = ds_1h["candles"]
+        c_4h = ds_4h["candles"]
         if not c_15m or not c_1h or not c_4h: continue
 
         n_15m = len(c_15m)

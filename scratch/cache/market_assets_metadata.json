@@ -1,0 +1,437 @@
+{
+  "timestamp": 1794135786.676477,
+  "exchange": "hyperliquid",
+  "universe_count": 43,
+  "assets": [
+    {
+      "name": "BTC",
+      "markPrice": 75912.0,
+      "volume24h": 498403152.1569902,
+      "change24h": -0.08,
+      "openInterest": 42164.0283,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 5,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ZEC",
+      "markPrice": 1264.7,
+      "volume24h": 248063777.47099975,
+      "change24h": -2.75,
+      "openInterest": 490198.1400000001,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 2,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ETH",
+      "markPrice": 2235.0,
+      "volume24h": 193690884.35548,
+      "change24h": -0.51,
+      "openInterest": 976837.5608,
+      "fundingRate": 1.17344e-05,
+      "szDecimals": 4,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "HYPE",
+      "markPrice": 76.945,
+      "volume24h": 136906420.91472992,
+      "change24h": -1.72,
+      "openInterest": 22203179.38000001,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 2,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "SOL",
+      "markPrice": 89.179,
+      "volume24h": 57541311.274969995,
+      "change24h": -0.86,
+      "openInterest": 5549888.680000004,
+      "fundingRate": 8.779e-07,
+      "szDecimals": 2,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "PUMP",
+      "markPrice": 0.00365,
+      "volume24h": 45835534.533118,
+      "change24h": -5.64,
+      "openInterest": 18473375450.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "XMR",
+      "markPrice": 602.32,
+      "volume24h": 38136376.403669976,
+      "change24h": -1.92,
+      "openInterest": 251101.8700000001,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 3,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "XRP",
+      "markPrice": 1.1599,
+      "volume24h": 25847642.73509999,
+      "change24h": -0.91,
+      "openInterest": 168960192.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "NEAR",
+      "markPrice": 3.7115,
+      "volume24h": 24320854.660510033,
+      "change24h": 0.35,
+      "openInterest": 41774178.6,
+      "fundingRate": 3.1628e-06,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "LIT",
+      "markPrice": 3.2568,
+      "volume24h": 18258478.707300007,
+      "change24h": 0.92,
+      "openInterest": 36304522.0,
+      "fundingRate": 2.4184e-06,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ENA",
+      "markPrice": 0.152775,
+      "volume24h": 11634596.835769994,
+      "change24h": -5.75,
+      "openInterest": 404735202.0,
+      "fundingRate": -1.08626e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "KPEPE",
+      "markPrice": 0.00491,
+      "volume24h": 11426048.708375,
+      "change24h": -0.3,
+      "openInterest": 10648175348.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "UNI",
+      "markPrice": 7.0228,
+      "volume24h": 8410361.394140003,
+      "change24h": 0.04,
+      "openInterest": 10216070.800000003,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "WLD",
+      "markPrice": 0.32829,
+      "volume24h": 5475916.005689997,
+      "change24h": -2.73,
+      "openInterest": 123529060.6,
+      "fundingRate": 4.7255e-06,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "XPL",
+      "markPrice": 0.05569,
+      "volume24h": 5154407.658572999,
+      "change24h": -3.81,
+      "openInterest": 757819502.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "BNB",
+      "markPrice": 697.079,
+      "volume24h": 5038643.045979997,
+      "change24h": 0.4,
+      "openInterest": 60853.558,
+      "fundingRate": 1.0194e-05,
+      "szDecimals": 3,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "CASHCAT",
+      "markPrice": 0.0852,
+      "volume24h": 4611048.348246998,
+      "change24h": -8.86,
+      "openInterest": 218592618.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ARB",
+      "markPrice": 0.16927,
+      "volume24h": 4148857.1647109995,
+      "change24h": 2.06,
+      "openInterest": 87346020.39999999,
+      "fundingRate": 9.1745e-06,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "BCH",
+      "markPrice": 245.3,
+      "volume24h": 4017110.053499999,
+      "change24h": -4.23,
+      "openInterest": 26950.596,
+      "fundingRate": -1.7945e-05,
+      "szDecimals": 3,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "SUI",
+      "markPrice": 0.8479,
+      "volume24h": 3766975.215274001,
+      "change24h": -1.63,
+      "openInterest": 32507114.999999993,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "MET",
+      "markPrice": 0.311482,
+      "volume24h": 3732888.1530600004,
+      "change24h": 5.79,
+      "openInterest": 7949648.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "INJ",
+      "markPrice": 8.214,
+      "volume24h": 3437035.76637,
+      "change24h": 0.57,
+      "openInterest": 797646.2,
+      "fundingRate": -6.4709e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "TRUMP",
+      "markPrice": 1.16056,
+      "volume24h": 3359674.8602199983,
+      "change24h": -1.57,
+      "openInterest": 8201988.000000001,
+      "fundingRate": -5.1724e-06,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "PONS",
+      "markPrice": 0.16561,
+      "volume24h": 3122258.928050001,
+      "change24h": -13.51,
+      "openInterest": 55738952.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "AERO",
+      "markPrice": 0.59992,
+      "volume24h": 2770234.5117400005,
+      "change24h": -0.29,
+      "openInterest": 42318198.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ONDO",
+      "markPrice": 0.36,
+      "volume24h": 2451941.22441,
+      "change24h": -1.77,
+      "openInterest": 44653012.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "GRAM",
+      "markPrice": 1.063938,
+      "volume24h": 2353954.015999998,
+      "change24h": -3.08,
+      "openInterest": 18178820.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "TAO",
+      "markPrice": 222.88,
+      "volume24h": 2301078.17757,
+      "change24h": -0.9,
+      "openInterest": 123483.506,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 3,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "VVV",
+      "markPrice": 20.3675,
+      "volume24h": 2179306.3342900015,
+      "change24h": -1.57,
+      "openInterest": 2888009.8000000007,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 2,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "AAVE",
+      "markPrice": 130.2029,
+      "volume24h": 2173059.011999999,
+      "change24h": -0.81,
+      "openInterest": 400813.52,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 2,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "DOGE",
+      "markPrice": 0.07089,
+      "volume24h": 2118724.7743340014,
+      "change24h": -1.43,
+      "openInterest": 960435374.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "CRV",
+      "markPrice": 0.26305,
+      "volume24h": 1947463.005456,
+      "change24h": -0.47,
+      "openInterest": 46129996.99999999,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ADA",
+      "markPrice": 0.17977,
+      "volume24h": 1832022.8925,
+      "change24h": -1.77,
+      "openInterest": 139802288.0,
+      "fundingRate": -4.9101e-06,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "MEGA",
+      "markPrice": 0.050926,
+      "volume24h": 1704045.953133,
+      "change24h": 1.58,
+      "openInterest": 172077220.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "ZRO",
+      "markPrice": 1.6155,
+      "volume24h": 1657011.835149999,
+      "change24h": -0.18,
+      "openInterest": 33021630.600000005,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "STRK",
+      "markPrice": 0.03956,
+      "volume24h": 1599914.4939400004,
+      "change24h": -4.86,
+      "openInterest": 591733381.6,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "WLFI",
+      "markPrice": 0.046566,
+      "volume24h": 1542707.6172129994,
+      "change24h": 0.33,
+      "openInterest": 382742100.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "FARTCOIN",
+      "markPrice": 0.11676,
+      "volume24h": 1539237.2217380004,
+      "change24h": -0.54,
+      "openInterest": 164142783.60000002,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "LINK",
+      "markPrice": 10.7465,
+      "volume24h": 1516019.0527000006,
+      "change24h": -0.62,
+      "openInterest": 4866122.999999999,
+      "fundingRate": 1.05295e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "USELESS",
+      "markPrice": 0.13143,
+      "volume24h": 1425713.1773700006,
+      "change24h": -0.34,
+      "openInterest": 80282100.0,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "TRX",
+      "markPrice": 0.3205,
+      "volume24h": 1248290.8154200008,
+      "change24h": 0.32,
+      "openInterest": 41390292.0,
+      "fundingRate": 8.24e-08,
+      "szDecimals": 0,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "DOT",
+      "markPrice": 0.89845,
+      "volume24h": 1147644.3649139996,
+      "change24h": -0.6,
+      "openInterest": 6317717.399999999,
+      "fundingRate": -3.5105e-06,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    },
+    {
+      "name": "GRASS",
+      "markPrice": 0.50056,
+      "volume24h": 1080937.586595,
+      "change24h": 0.11,
+      "openInterest": 40570150.800000004,
+      "fundingRate": 1.25e-05,
+      "szDecimals": 1,
+      "is_stale_fallback": false
+    }
+  ]
+}

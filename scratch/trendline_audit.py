@@ -12,9 +12,13 @@ from app.analyzer.trendline import (
     calculate_atr,
 )
 from app.analyzer.mtf_trendline import MTFTrendlineManager
-
-TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+    resolve_research_timeframes,
+)
 
 async def run_audit():
     print("=" * 80)
@@ -26,12 +30,18 @@ async def run_audit():
     issues = []
     regimes_checked = {}
 
-    for coin in COINS:
-        print(f"\n🪙 Auditing coin: {coin} across {len(TIMEFRAMES)} timeframes...")
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    target_tfs = await resolve_research_timeframes(["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"])
+    print(f"Universally discovered assets: {target_coins}")
+    print(f"Universally supported timeframes: {target_tfs}")
+
+    for coin in target_coins:
+        print(f"\n🪙 Auditing coin: {coin} across {len(target_tfs)} timeframes...")
         timeframe_lines_map = {}
 
-        for tf in TIMEFRAMES:
-            candles = await hl_client.get_candles(coin=coin, interval=tf, limit=300)
+        for tf in target_tfs:
+            ds = await get_single_dataset(coin=coin, timeframe=tf, limit=300)
+            candles = ds["candles"]
             if not candles or len(candles) < 20:
                 print(f"  ⚠️ [{tf}] Insufficient candle data ({len(candles) if candles else 0} bars)")
                 continue

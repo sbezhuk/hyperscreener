@@ -200,10 +200,12 @@ async def run_e2e_integrity_audit():
     return all_synced
 
 
+from app.research.pipeline import resolve_research_coins, resolve_research_timeframes
+
 async def run_performance_benchmark():
     print("\n--- 6. PERFORMANCE BENCHMARK ---")
-    coins = ["BTC", "ETH", "SOL"]
-    intervals = ["15m", "1h", "4h"]
+    coins = await resolve_research_coins(min_volume_usd=10_000_000, top_n=3)
+    intervals = resolve_research_timeframes()
 
     durations = []
     print("  Benchmarking full MTF screener analysis across BTC, ETH, SOL...")

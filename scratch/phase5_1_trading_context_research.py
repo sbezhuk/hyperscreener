@@ -21,8 +21,13 @@ from app.analyzer.trendline import (
 from app.analyzer.structure import analyze_market_structure
 from app.analyzer.fvg import detect_and_track_fvgs
 from app.analyzer.levels import find_pivot_points, cluster_levels
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
 BASE_TF = "15m"
 HTF_TF = "1h"
 HORIZON_BARS = 20
@@ -159,10 +164,15 @@ async def main():
     scenario_b_headwind = []        # Scenario B: LONG signals with direct Resistance Headwind <= 1.0 ATR
     scenario_b_open_space = []      # Scenario B control: LONG signals with Resistance Headwind > 2.5 ATR or none
 
-    for coin in COINS:
-        print(f"\nFetching multi-timeframe candle datasets for {coin}...")
-        c_ltf = await hl_client.get_candles(coin=coin, interval=BASE_TF, limit=1200)
-        c_htf = await hl_client.get_candles(coin=coin, interval=HTF_TF, limit=600)
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=10)
+    print(f"Universally discovered {len(target_coins)} active perpetuals: {target_coins}")
+
+    for coin in target_coins:
+        print(f"\nLoading multi-timeframe candle datasets for {coin}...")
+        ds_ltf = await get_single_dataset(coin=coin, timeframe=BASE_TF, limit=1200)
+        ds_htf = await get_single_dataset(coin=coin, timeframe=HTF_TF, limit=600)
+        c_ltf = ds_ltf["candles"]
+        c_htf = ds_htf["candles"]
 
         if not c_ltf or len(c_ltf) < 100 or not c_htf or len(c_htf) < 40:
             print(f"  [{coin}] Insufficient candle data.")

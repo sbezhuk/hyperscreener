@@ -17,8 +17,13 @@ from app.analyzer.trendline import (
     DEFAULT_COMPRESSION_THRESHOLD,
 )
 from app.analyzer.structure import analyze_market_structure
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
 TIMEFRAME_PAIRS = [
     ("15m", "1h"),
     ("1h", "4h"),
@@ -89,15 +94,19 @@ async def run_statistical_audit():
 
     grand_total_lines = 0
 
-    for coin in COINS:
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=8)
+    print(f"Universally discovered assets: {target_coins}")
+
+    for coin in target_coins:
         print(f"\nProcessing {coin} historical datasets...")
         for ltf, htf in TIMEFRAME_PAIRS:
             ltf_step = tf_seconds[ltf]
             htf_step = tf_seconds[htf]
 
-            # Fetch up to 1000 LTF candles and 500 HTF candles
-            c_ltf = await hl_client.get_candles(coin=coin, interval=ltf, limit=1000)
-            c_htf = await hl_client.get_candles(coin=coin, interval=htf, limit=500)
+            ds_ltf = await get_single_dataset(coin=coin, timeframe=ltf, limit=1000)
+            ds_htf = await get_single_dataset(coin=coin, timeframe=htf, limit=500)
+            c_ltf = ds_ltf["candles"]
+            c_htf = ds_htf["candles"]
 
             if not c_ltf or len(c_ltf) < 80 or not c_htf or len(c_htf) < 30:
                 print(f"  [{coin} {ltf}->{htf}] Insufficient candle history.")

@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from app.analyzer.screener import analyze_coin_data, enrich_signals_with_trendline_context
 from app.hyperliquid import hl_client
+from research_pipeline import resolve_research_coins
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
 INTERVAL = "15m"
 
 
@@ -17,12 +17,15 @@ async def run_e2e_audit():
     print("PHASE 5.2: E2E PRODUCTION INTEGRATION AUDIT & BENCHMARK")
     print("=" * 90)
 
+    target_coins = await resolve_research_coins(min_volume_usd=10_000_000, top_n=6)
+    print(f"Universally discovered assets: {target_coins}")
+
     total_signals = 0
     tier_counts = {"TIER_1_CONFLUENT": 0, "TIER_2_STANDARD": 0, "TIER_3_WARNING": 0}
     api_contract_verified = True
     latencies = []
 
-    for coin in COINS:
+    for coin in target_coins:
         print(f"\n[E2E] Auditing {coin} ({INTERVAL})...")
         t0 = time.perf_counter()
         data = await analyze_coin_data(coin=coin, interval=INTERVAL, limit=300, include_mtf=True)

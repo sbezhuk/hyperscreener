@@ -16,9 +16,13 @@ from app.analyzer.trendline import (
     TIMEFRAME_SWING_CONFIG,
 )
 from app.analyzer.structure import analyze_market_structure
+from research_pipeline import (
+    discover_available_assets,
+    discover_supported_timeframes,
+    get_single_dataset,
+    resolve_research_coins,
+)
 
-COINS = ["BTC", "ETH", "SOL", "PUMP", "MET"]
-TIMEFRAMES = ["15m", "1h"]
 HORIZON = 15
 BOOTSTRAP_REPLICATIONS = 1000
 RANDOM_SEED = 42
@@ -114,10 +118,15 @@ async def run_predictive_validation():
 
     dataset = []
 
-    for coin in COINS:
+    target_coins = await resolve_research_coins(min_volume_usd=5_000_000, top_n=6)
+    print(f"Universally discovered assets: {target_coins}")
+
+    for coin in target_coins:
         print(f"Extracting unified predictive features for {coin}...")
-        candles_15m = await hl_client.get_candles(coin=coin, interval="15m", limit=1200)
-        candles_1h = await hl_client.get_candles(coin=coin, interval="1h", limit=600)
+        ds_15m = await get_single_dataset(coin=coin, timeframe="15m", limit=1200)
+        ds_1h = await get_single_dataset(coin=coin, timeframe="1h", limit=600)
+        candles_15m = ds_15m["candles"]
+        candles_1h = ds_1h["candles"]
         if not candles_15m or not candles_1h: continue
 
         n = len(candles_15m)

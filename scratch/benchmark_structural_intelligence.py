@@ -7,13 +7,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from app.hyperliquid import hl_client
 from app.analyzer.trendline import detect_timeframe_trendlines
+from app.research.pipeline import resolve_research_coins
 
 async def benchmark_performance():
     print("=" * 80)
     print("⚡ PERFORMANCE BENCHMARK: Trendline Structural Intelligence Engine")
     print("=" * 80)
 
-    for coin in ["BTC", "ETH", "SOL"]:
+    target_coins = await resolve_research_coins(min_volume_usd=10_000_000, top_n=3)
+    for coin in target_coins:
         candles = await hl_client.get_candles(coin=coin, interval="15m", limit=1000)
         if not candles: continue
 
