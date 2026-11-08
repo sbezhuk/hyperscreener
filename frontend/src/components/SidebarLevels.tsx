@@ -323,95 +323,95 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
       
       {/* 1. Market Structure & Trend Header */}
       {structure && (
-        <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/70 dark:bg-[#15191e]/50">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
-              <Activity className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /> СТРУКТУРА ТА ТРЕНД
+        <div className="p-3 bg-slate-50/40 dark:bg-[#12161d]/30">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-slate-500 dark:text-gray-400 font-semibold flex items-center gap-1.5 uppercase text-[11px] tracking-wider whitespace-nowrap">
+              <Activity className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+              СТРУКТУРА ТА ТРЕНД
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 flex-shrink-0 ${
                 structure.trend === 'BULLISH'
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-[#0ecb81]'
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-[#0ecb81] border border-emerald-500/30'
                   : structure.trend === 'BEARISH'
-                  ? 'bg-rose-500/10 text-[#f6465d]'
-                  : 'bg-amber-500/10 text-amber-600 dark:text-yellow-400'
+                  ? 'bg-rose-500/15 text-rose-600 dark:text-[#f6465d] border border-rose-500/30'
+                  : 'bg-amber-500/15 text-amber-600 dark:text-yellow-400 border border-amber-500/30'
               }`}
             >
+              {structure.trend === 'BULLISH' && <TrendingUp className="w-3 h-3" />}
+              {structure.trend === 'BEARISH' && <TrendingDown className="w-3 h-3" />}
               {structure.trend}
             </span>
           </div>
-          <div className="text-slate-700 dark:text-gray-300 font-medium text-[11px] mt-0.5">
-            {structure.summary}
-          </div>
 
-          {(openInterest !== undefined || fundingRate !== undefined) && (
-            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-[#1e2329]/60 flex justify-between text-[11px] text-slate-500 dark:text-gray-400">
-              {openInterest !== undefined && (
-                <div>
-                  <span className="text-slate-400 dark:text-gray-500">OI: </span>
-                  <span className="text-slate-800 dark:text-gray-200 font-mono font-medium">{openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-                </div>
-              )}
-              {fundingRate !== undefined && (
-                <div>
-                  <span className="text-slate-400 dark:text-gray-500">Фінансування: </span>
-                  <span className={`font-mono font-medium ${fundingRate >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                    {(fundingRate * 100).toFixed(4)}%
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          <div className="bg-white dark:bg-[#151920] p-2.5 rounded-lg border border-slate-200/80 dark:border-[#20252e] flex items-center justify-between gap-2 shadow-2xs">
+            <span className="text-slate-800 dark:text-gray-200 font-medium text-xs leading-snug">
+              {structure.summary}
+            </span>
+            {fundingRate !== undefined && (
+              <span 
+                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${
+                  fundingRate >= 0 
+                    ? 'text-emerald-600 dark:text-[#0ecb81] bg-emerald-500/10 border border-emerald-500/20' 
+                    : 'text-rose-600 dark:text-[#f6465d] bg-rose-500/10 border border-rose-500/20'
+                }`}
+                title="Funding Rate (ставка фінансування)"
+              >
+                FR: {(fundingRate * 100).toFixed(4)}%
+              </span>
+            )}
+          </div>
         </div>
       )}
 
       {/* 2. Open Interest (OI) Delta & Breakout Confirmation */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329] bg-slate-50/50 dark:bg-[#15191e]/40">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-slate-500 dark:text-gray-400 font-medium flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
-            <BarChart2 className="w-3.5 h-3.5 text-emerald-500" /> ДЕТЕКЦІЯ OI DELTA
+      <div className="p-3 bg-slate-50/20 dark:bg-[#12161d]/20 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 dark:text-gray-400 font-semibold flex items-center gap-1.5 uppercase text-[11px] tracking-wider whitespace-nowrap">
+            <BarChart2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+            ДЕТЕКЦІЯ OI DELTA
           </span>
           <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
               oiData?.oi_status === 'INCREASING'
-                ? 'bg-emerald-500/10 text-[#0ecb81]'
+                ? 'bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30'
                 : oiData?.oi_status === 'DECREASING'
-                ? 'bg-rose-500/10 text-[#f6465d]'
-                : 'bg-slate-500/10 text-slate-500 dark:text-gray-400'
+                ? 'bg-rose-500/15 text-[#f6465d] border border-rose-500/30'
+                : 'bg-slate-200 dark:bg-[#1e2329] text-slate-500 dark:text-gray-400'
             }`}
           >
             {oiData?.oi_status || 'NEUTRAL'}
           </span>
         </div>
 
-        {/* Current OI & Volatility threshold */}
-        <div className="flex flex-col gap-0.5 mb-2 text-[11px]">
+        {/* Current OI & Volatility card */}
+        <div className="bg-white dark:bg-[#151920] p-2 rounded-lg border border-slate-200/80 dark:border-[#20252e] space-y-1.5 text-[11px]">
           <div className="flex justify-between items-baseline">
-            <span className="text-slate-400 dark:text-gray-500">Базовий OI: </span>
-            <span className="text-slate-800 dark:text-gray-100 font-mono font-bold">
-              {oiData?.current_oi !== null && oiData?.current_oi !== undefined
-                ? oiData.current_oi.toLocaleString(undefined, { maximumFractionDigits: 1 })
-                : openInterest !== undefined
-                ? openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })
-                : '---'}{' '}
-              <span className="text-[10px] text-slate-400 font-sans font-normal">{oiData?.coin || ''}</span>
-            </span>
+            <span className="text-slate-400 dark:text-gray-500 text-[10px]">Базовий OI:</span>
+            <div className="text-right">
+              <span className="text-slate-900 dark:text-gray-100 font-mono font-bold">
+                {oiData?.current_oi !== null && oiData?.current_oi !== undefined
+                  ? oiData.current_oi.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                  : openInterest !== undefined
+                  ? openInterest.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                  : '---'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-sans ml-1">
+                {oiData?.coin || ''}
+              </span>
+              {oiData?.current_oi_usd && (
+                <span className="text-[10px] text-slate-400 dark:text-gray-500 font-mono ml-1.5">
+                  (${oiData.current_oi_usd >= 1e9
+                    ? `${(oiData.current_oi_usd / 1e9).toFixed(2)}B`
+                    : `${(oiData.current_oi_usd / 1e6).toFixed(2)}M`})
+                </span>
+              )}
+            </div>
           </div>
 
-          {oiData?.current_oi_usd && (
-            <div className="flex justify-between items-baseline text-[10px]">
-              <span className="text-slate-400 dark:text-gray-500">Номінал USD: </span>
-              <span className="text-slate-600 dark:text-gray-300 font-mono font-medium">
-                ${oiData.current_oi_usd >= 1e9
-                  ? `${(oiData.current_oi_usd / 1e9).toFixed(2)}B`
-                  : `${(oiData.current_oi_usd / 1e6).toFixed(2)}M`}
-              </span>
-            </div>
-          )}
-
-          <div className="flex justify-between items-baseline text-[10px] text-slate-400 dark:text-gray-500 font-mono mt-0.5">
+          <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-gray-500 pt-1 border-t border-slate-100 dark:border-[#1e2329]">
             <span>Поріг чутливості θ:</span>
-            <span className={oiData?.volatility_info?.is_adaptive ? 'text-emerald-500' : 'text-slate-400'}>
+            <span className={`font-mono font-medium ${oiData?.volatility_info?.is_adaptive ? 'text-emerald-500' : 'text-slate-400'}`}>
               ±{(oiData?.volatility_threshold_pct ?? 0.25).toFixed(2)}%
               {oiData?.volatility_info?.is_adaptive ? ' (адапт.)' : ' (фікс.)'}
             </span>
@@ -419,7 +419,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
         </div>
 
         {/* Multi-Interval Delta Grid: 1m, 5m, 15m, 1h */}
-        <div className="grid grid-cols-4 gap-1 mb-2 font-mono text-[10px]">
+        <div className="grid grid-cols-4 gap-1.5 font-mono text-[10px]">
           {(['1m', '5m', '15m', '1h'] as const).map((intv) => {
             const d = oiData?.deltas?.[intv];
             const pct = d?.delta_pct ?? 0;
@@ -431,17 +431,17 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
             const colorClass = isGap
               ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
               : isNoHist
-              ? 'text-slate-400 bg-slate-100 dark:bg-[#1e2329]/30 border-slate-200 dark:border-[#2b313a]'
+              ? 'text-slate-400 bg-slate-100 dark:bg-[#171b21] border-slate-200 dark:border-[#222730]'
               : isInc
-              ? 'text-[#0ecb81] bg-emerald-500/10 border-emerald-500/20'
+              ? 'text-[#0ecb81] bg-emerald-500/10 border-emerald-500/25 font-bold'
               : isDec
-              ? 'text-[#f6465d] bg-rose-500/10 border-rose-500/20'
-              : 'text-slate-500 dark:text-gray-400 bg-slate-100 dark:bg-[#1e2329]/50 border-slate-200 dark:border-[#2b313a]';
+              ? 'text-[#f6465d] bg-rose-500/10 border-rose-500/25 font-bold'
+              : 'text-slate-600 dark:text-gray-300 bg-slate-100 dark:bg-[#171b21] border-slate-200 dark:border-[#222730]';
 
             return (
-              <div key={intv} className={`p-1 rounded border flex flex-col items-center justify-center ${colorClass}`}>
-                <span className="text-[9px] text-slate-400 dark:text-gray-500 font-sans">{intv}</span>
-                <span className="font-bold">
+              <div key={intv} className={`p-1.5 rounded-md border flex flex-col items-center justify-center ${colorClass}`}>
+                <span className="text-[9px] text-slate-400 dark:text-gray-500 font-sans uppercase font-semibold">{intv}</span>
+                <span className="text-[11px] mt-0.5 whitespace-nowrap">
                   {isGap ? (
                     'GAP'
                   ) : isNoHist || d?.delta_pct === null || d?.delta_pct === undefined ? (
@@ -466,11 +466,11 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
 
         {/* Level Breakout / Interaction Analysis Card */}
         {oiData?.breakout_signals && oiData.breakout_signals.length > 0 ? (
-          <div className="space-y-1.5 mt-2">
+          <div className="space-y-1.5">
             {oiData.breakout_signals.slice(0, 2).map((sig) => (
               <div
                 key={sig.level_id}
-                className={`p-2 rounded border text-[11px] ${
+                className={`p-2 rounded-lg border text-[11px] ${
                   sig.badge_color === 'green'
                     ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200'
                     : sig.badge_color === 'red'
@@ -483,7 +483,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                 <div className="flex justify-between items-center font-bold mb-1">
                   <div className="flex items-center gap-1.5">
                     <span
-                      className={`text-[9px] px-1 py-0.2 rounded font-sans font-bold ${
+                      className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold ${
                         sig.direction === 'UP'
                           ? 'bg-emerald-500/20 text-[#0ecb81]'
                           : 'bg-rose-500/20 text-[#f6465d]'
@@ -514,512 +514,355 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
             ))}
           </div>
         ) : (
-          <div className="text-[10px] text-slate-400 dark:text-gray-500 italic py-0.5">
+          <div className="text-[10px] text-slate-400 dark:text-gray-500 italic py-1 px-2 rounded bg-slate-100/60 dark:bg-[#14181e] border border-slate-200/50 dark:border-[#1d222b]">
             Ціна поза зоною пробою / тестування ключових рівнів.
           </div>
         )}
       </div>
 
       {/* 3. Found Formations Section */}
-      <div className="p-3 border-b border-slate-200 dark:border-[#1e2329]">
+      <div className="p-3">
         <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
-          <span>ЗНАЙДЕНІ ФОРМАЦІЇ · {filteredSignals.length}</span>
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            ЗНАЙДЕНІ ФОРМАЦІЇ · {filteredSignals.length}
+          </span>
         </div>
 
         {filteredSignals.length === 0 ? (
-          <p className="text-slate-400 dark:text-gray-500 text-[11px] leading-relaxed py-1">
-            Для цієї формації зараз немає сигналів, лише лінії на графіку.
+          <p className="text-slate-400 dark:text-gray-500 text-[11px] leading-relaxed py-2 text-center bg-slate-50/50 dark:bg-[#14181e] rounded-lg border border-slate-200/60 dark:border-[#1e2329]">
+            Для поточної монети формацій не виявлено.
           </p>
         ) : (
-          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-            {filteredSignals.map((sig) => (
-              <div
-                key={sig.id}
-                onClick={() => onSelectSignal?.(sig)}
-                className="p-2 rounded bg-slate-50 dark:bg-[#15191e] border border-slate-200 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 cursor-pointer transition flex flex-col gap-1"
-              >
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px] leading-snug break-words">{sig.title}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1 justify-start">
-                    {sig.category === 'trendline' && (
-                      <>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 whitespace-nowrap flex-shrink-0">
-                          Q: {Math.round(sig.structural_quality ?? sig.structuralQuality ?? sig.strength ?? 50)}
-                        </span>
-                        {(sig.is_confirmed || sig.isConfirmed || (sig.touch_count ?? sig.touchCount ?? 0) >= 3) && (
-                          <span className="px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                            x3+ Підтверджена
-                          </span>
-                        )}
-                        {(sig.signal_type || sig.signalType) && (
-                          <span
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                              (sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
-                                ? ((sig.is_retest || sig.isRetest) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30')
-                                : (sig.signal_type === 'CHANNEL_BREAKOUT' || sig.signalType === 'CHANNEL_BREAKOUT')
-                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
-                                : (sig.signal_type === 'CHANNEL_FALSE_BREAKOUT' || sig.signalType === 'CHANNEL_FALSE_BREAKOUT')
-                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
-                                : (sig.signal_type === 'CHANNEL_TEST' || sig.signalType === 'CHANNEL_TEST')
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
-                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
-                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                            }`}
-                          >
-                            {(sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
-                              ? ((sig.is_retest || sig.isRetest) ? 'РЕТЕСТ ПРОБОЮ' : 'ПРОБІЙ')
-                              : (sig.signal_type === 'CHANNEL_BREAKOUT' || sig.signalType === 'CHANNEL_BREAKOUT')
-                              ? 'ПРОБІЙ ТУНЕЛЮ'
-                              : (sig.signal_type === 'CHANNEL_FALSE_BREAKOUT' || sig.signalType === 'CHANNEL_FALSE_BREAKOUT')
-                              ? 'ХИБНИЙ ПРОБІЙ'
-                              : (sig.signal_type === 'CHANNEL_TEST' || sig.signalType === 'CHANNEL_TEST')
-                              ? 'ТЕСТ ТУНЕЛЮ'
-                              : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
-                              ? 'ВІДСКОК'
-                              : 'АКТИВНА'}
-                          </span>
-                        )}
-                        {(sig.statusLabel || sig.status_label) && (
-                          <span
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                              (sig.badgeColor === 'green' || sig.badge_color === 'green')
-                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
-                                : (sig.badgeColor === 'red' || sig.badge_color === 'red')
-                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
-                                : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                            }`}
-                          >
-                            {sig.statusLabel || sig.status_label}
-                          </span>
-                        )}
-                        {!(sig.signal_type || sig.signalType) && (
-                          <span
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                              sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
-                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
-                                : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                : sig.interaction_state === 'COMPRESSION' || sig.interactionState === 'COMPRESSION'
-                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
-                                : sig.interaction_state === 'TESTING' || sig.interactionState === 'TESTING'
-                                ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'
-                                : sig.interaction_state === 'REJECTED' || sig.interactionState === 'REJECTED'
-                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
-                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                            }`}
-                          >
-                            {(() => {
-                              const state = sig.interaction_state || sig.interactionState || 'ACTIVE';
-                              const stateMap: Record<string, string> = {
-                                BREAKOUT: 'ПРОБІЙ',
-                                RETEST: 'РЕТЕСТ',
-                                COMPRESSION: 'СТИCНЕННЯ',
-                                TESTING: 'ТЕСТ',
-                                REJECTED: 'ВІДХИЛЕНО',
-                                APPROACHING: 'НАБЛИЖЕННЯ',
-                                STALE: 'ЗАСТАРІЛА',
-                                ACTIVE: 'АКТИВНА',
-                              };
-                              return stateMap[state] || state;
-                            })()}
-                          </span>
-                        )}
-                        {(sig.htf_context || sig.htfContext) && (sig.htf_context !== 'UNAVAILABLE' && sig.htfContext !== 'UNAVAILABLE') && (
-                          <span
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                              (sig.htf_context === 'AGAINST_HTF' || sig.htfContext === 'AGAINST_HTF')
-                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
-                                : (sig.htf_context === 'ALIGNED' || sig.htfContext === 'ALIGNED')
-                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
-                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                            }`}
-                          >
-                            {(sig.htf_context === 'AGAINST_HTF' || sig.htfContext === 'AGAINST_HTF')
-                              ? '⚠️ ПРОТИ HTF'
-                              : (sig.htf_context === 'ALIGNED' || sig.htfContext === 'ALIGNED')
-                              ? 'HTF: ЗБІГ'
-                              : 'HTF: НЕЙТР.'}
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {sig.category === 'sweep' && sig.confirmationStatus && (
-                      <span
-                        className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                          sig.confirmationStatus === 'CONFIRMED'
-                            ? 'bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30'
-                            : sig.confirmationStatus === 'POTENTIAL'
-                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                            : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
-                        }`}
-                      >
-                        {sig.confirmationStatus === 'CONFIRMED'
-                          ? 'ПІДТВЕРДЖЕНО'
-                          : sig.confirmationStatus === 'POTENTIAL'
-                          ? 'ПОТЕНЦІЙНИЙ'
-                          : 'НЕПІДТВЕРДЖЕНО'}
-                      </span>
-                    )}
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+            {filteredSignals.map((sig) => {
+              const isLong = sig.direction === 'LONG';
+              const isShort = sig.direction === 'SHORT';
 
-                    {/* Phase 5.2: Structural Context Tier / Warning Badges */}
-                    {(() => {
-                      const ctx = sig.structuralContext || sig.structural_context;
-                      if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
-                      const isTier1 = ctx.structuralTier === 'TIER_1_CONFLUENT' || ctx.structural_tier === 'TIER_1_CONFLUENT' || ctx.hasSupportConfluence || ctx.has_support_confluence;
-                      const flags = ctx.riskFlags || ctx.risk_flags || [];
-                      const isAgainstHtf = flags.includes('AGAINST_HTF') || ctx.htfAlignment === 'AGAINST_HTF' || ctx.htf_alignment === 'AGAINST_HTF';
-                      const isComp = flags.includes('COMPRESSION') || ctx.isCompression || ctx.is_compression;
-
-                      return (
-                        <>
-                          {isTier1 && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30 whitespace-nowrap flex-shrink-0">
-                              🛡️ Збіг
-                            </span>
-                          )}
-                          {isAgainstHtf && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-500/20 text-[#f6465d] border border-rose-500/30 whitespace-nowrap flex-shrink-0">
-                              ⚠️ Проти HTF
-                            </span>
-                          )}
-                          {isComp && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30 whitespace-nowrap flex-shrink-0">
-                              ⚡ Стиснення
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
-
+              return (
+                <div
+                  key={sig.id}
+                  onClick={() => onSelectSignal?.(sig)}
+                  className="p-2.5 rounded-lg bg-white dark:bg-[#14181f] border border-slate-200/90 dark:border-[#222731] hover:border-indigo-400 dark:hover:border-indigo-500 cursor-pointer transition shadow-2xs space-y-1.5"
+                >
+                  {/* Formation Header: Title + Direction Badge */}
+                  <div className="flex items-start justify-between gap-1.5">
+                    <span className="text-slate-900 dark:text-gray-100 font-semibold text-xs leading-snug">
+                      {sig.title}
+                    </span>
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap flex-shrink-0 ${
-                        sig.direction === 'LONG'
-                          ? 'bg-emerald-500/20 text-[#0ecb81]'
-                          : sig.direction === 'SHORT'
-                          ? 'bg-rose-500/20 text-[#f6465d]'
-                          : 'bg-gray-500/20 text-gray-400'
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase flex-shrink-0 ${
+                        isLong
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-[#0ecb81] border border-emerald-500/30'
+                          : isShort
+                          ? 'bg-rose-500/15 text-rose-600 dark:text-[#f6465d] border border-rose-500/30'
+                          : 'bg-slate-200 dark:bg-[#1e2329] text-slate-600 dark:text-gray-400'
                       }`}
                     >
                       {sig.direction}
                     </span>
                   </div>
+
+                  {/* Badges / Meta row */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {sig.category === 'trendline' && (
+                      <>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-100 dark:bg-[#1a2028] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#262c37]">
+                          Q: {Math.round(sig.structural_quality ?? sig.structuralQuality ?? sig.strength ?? 50)}
+                        </span>
+                        {(sig.is_confirmed || sig.isConfirmed || (sig.touch_count ?? sig.touchCount ?? 0) >= 3) && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                            x3+ Підтверджена
+                          </span>
+                        )}
+                        {(sig.signal_type || sig.signalType) && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30">
+                            {(sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE') ? 'ВІДСКОК' : 'АКТИВНА'}
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {sig.category === 'sweep' && sig.confirmationStatus && (
+                      <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30">
+                        {sig.confirmationStatus === 'CONFIRMED' ? 'ПІДТВЕРДЖЕНО' : 'ПОТЕНЦІЙНИЙ'}
+                      </span>
+                    )}
+
+                    {/* FVG specific status pill */}
+                    {sig.category === 'fvg' && (
+                      <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                        Дисбаланс FVG
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Formation Details / Description */}
+                  {sig.desc && (
+                    <div className="text-[10px] text-slate-600 dark:text-gray-300 bg-slate-50 dark:bg-[#101318] p-1.5 rounded border border-slate-100 dark:border-[#1c212a] leading-relaxed">
+                      {sig.desc}
+                    </div>
+                  )}
                 </div>
-
-                {sig.category === 'sweep' && sig.oiDeltaPct !== undefined && sig.oiDeltaPct !== null && (
-                  <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded">
-                    <span className="text-slate-400 dark:text-gray-500">Зміна Open Interest:</span>
-                    <span className={`font-bold ${sig.oiDeltaPct < 0 ? 'text-[#0ecb81]' : sig.oiDeltaPct > 0 ? 'text-[#f6465d]' : 'text-slate-400'}`}>
-                      {formatOiDeltaPct(sig.oiDeltaPct)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Phase 5.2: Enriched Structural Context row for Non-Trendline Signals */}
-                {sig.category !== 'trendline' && (() => {
-                  const ctx = sig.structuralContext || sig.structural_context;
-                  if (!ctx || (!ctx.contextAvailable && !ctx.context_available)) return null;
-                  const hasSup = ctx.hasSupportConfluence || ctx.has_support_confluence;
-                  const supDist = ctx.distanceToSupportAtr ?? ctx.distance_to_support_atr;
-                  const resDist = ctx.distanceToResistanceAtr ?? ctx.distance_to_resistance_atr;
-                  const supQ = ctx.confluentLineQ ?? ctx.confluent_line_q ?? ctx.nearestSupportQ ?? ctx.nearest_support_q;
-                  const htf = ctx.htfAlignment ?? ctx.htf_alignment;
-
-                  if ((supDist === null || supDist === undefined) && (resDist === null || resDist === undefined) && (!htf || htf === 'UNAVAILABLE')) {
-                    return null;
-                  }
-
-                  return (
-                    <div className="flex items-center justify-between text-[10px] font-mono py-0.5 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-slate-500 dark:text-gray-400">
-                      <div className="flex items-center gap-1.5 truncate">
-                        {hasSup ? (
-                          <span className="text-[#0ecb81] font-semibold">
-                            Підтримка Q:{Math.round(supQ ?? 80)} ({supDist !== null && supDist !== undefined ? supDist.toFixed(1) : '0.0'} ATR)
-                          </span>
-                        ) : supDist !== null && supDist !== undefined ? (
-                          <span>Підтримка: {supDist.toFixed(1)} ATR</span>
-                        ) : null}
-                        {resDist !== null && resDist !== undefined && (
-                          <span>Опір: {resDist.toFixed(1)} ATR</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {htf === 'ALIGNED' && (
-                          <span className="text-[#0ecb81] text-[9px] font-bold">1h Збіг</span>
-                        )}
-                        {htf === 'AGAINST_HTF' && (
-                          <span className="text-[#f6465d] text-[9px] font-bold">Проти 1h</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {sig.category === 'trendline' && (
-                  <div className="flex flex-col gap-1 py-1 px-1.5 bg-slate-100 dark:bg-[#1a1f26] rounded text-[10px] font-mono text-slate-500 dark:text-gray-400">
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                      <div>Дотиків: <b className="text-slate-700 dark:text-gray-300">x{sig.touch_count ?? sig.touchCount ?? 2}</b></div>
-                      <div>Відстань: <b className="text-slate-700 dark:text-gray-300">{(sig.distance_to_line_atr ?? sig.distanceToLineAtr ?? 0).toFixed(2)} ATR</b></div>
-                      <div>Стиснення: <b className="text-slate-700 dark:text-gray-300">{(sig.compression_ratio ?? sig.compressionRatio ?? 1.0).toFixed(2)}</b></div>
-                    </div>
-                    {((sig.structural_risk_flags && sig.structural_risk_flags.length > 0) || (sig.structuralRiskFlags && sig.structuralRiskFlags.length > 0)) && (
-                      <div className="flex items-center gap-1 flex-wrap pt-0.5 border-t border-slate-200 dark:border-slate-800">
-                        <span className="text-[9px] text-slate-400">Ризики:</span>
-                        {(sig.structural_risk_flags || sig.structuralRiskFlags || []).map((flag) => (
-                          <span
-                            key={flag}
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold ${
-                              flag === 'AGAINST_HTF'
-                                ? 'bg-rose-500/20 text-[#f6465d]'
-                                : flag === 'COMPRESSION'
-                                ? 'bg-amber-500/20 text-amber-500'
-                                : flag === 'BREAKOUT'
-                                ? 'bg-rose-500/20 text-[#f6465d]'
-                                : flag === 'RETEST'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-slate-500/20 text-slate-400'
-                            }`}
-                          >
-                            {flag === 'AGAINST_HTF' ? '⚠️ ПРОТИ HTF' : flag === 'COMPRESSION' ? '⚡ СТИСНЕННЯ' : flag === 'BREAKOUT' ? 'ПРОБІЙ' : flag === 'RETEST' ? 'РЕТЕСТ' : 'ЗАСТАРІЛА'}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {(sig.target_price || sig.targetPrice) && (
-                      <div className="pt-0.5 border-t border-slate-200 dark:border-slate-800 text-[9px] text-indigo-600 dark:text-indigo-400">
-                        <b>Ціль (медіана):</b> {(sig.target_price || sig.targetPrice)?.toFixed(4)}
-                      </div>
-                    )}
-                    {(sig.oiReason || sig.oi_reason) && (
-                      <div className="pt-0.5 border-t border-slate-200 dark:border-slate-800 text-[9px] text-slate-600 dark:text-gray-400">
-                        <b>OI:</b> {sig.oiReason || sig.oi_reason}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="text-[10px] text-slate-500 dark:text-gray-400 leading-snug">{sig.desc}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* 4. Lines & Zones on Chart Section */}
-      <div className="p-3 flex flex-col">
+      <div className="p-3 flex flex-col space-y-3">
         {/* Smart Money Concepts (SMC) Summary Card */}
-        <div className="mb-3 p-2 rounded bg-slate-50 dark:bg-[#12161c] border border-slate-200 dark:border-[#1e2329] text-[11px]">
-          <div className="flex items-center justify-between font-semibold text-slate-700 dark:text-gray-300 mb-1.5">
-            <span className="flex items-center gap-1.5">
+        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#12161d] border border-slate-200/80 dark:border-[#1e2329] text-[11px] shadow-2xs">
+          <div className="flex items-center justify-between font-semibold text-slate-700 dark:text-gray-300 mb-2">
+            <span className="flex items-center gap-1.5 text-xs">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
               SMART MONEY (SMC) РІВНІ
             </span>
             <span className="text-[10px] text-slate-400 dark:text-gray-500 font-mono">
-              Order Blocks & Pools
+              Найближчі пули
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5 font-mono text-[10px]">
-            <div className="bg-rose-500/10 text-rose-600 dark:text-rose-400 p-1.5 rounded border border-rose-500/20">
-              <div className="font-bold flex justify-between">
-                <span>OB SUPPLY</span>
-                <span>{resistances[0] ? `${resistances[0].price}` : '—'}</span>
+
+          <div className="grid grid-cols-2 gap-2 font-mono">
+            {/* Supply (Resistance) Card */}
+            <div className="bg-white dark:bg-[#161a22] p-2 rounded-lg border border-rose-200/80 dark:border-rose-900/40 flex flex-col justify-between space-y-1">
+              <div className="flex items-center justify-between text-[9px]">
+                <span className="font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider font-sans">
+                  OB SUPPLY
+                </span>
+                {resistances[0] && (
+                  <span className="font-bold text-[#f6465d]">
+                    +{resistances[0].distPct?.toFixed(1)}%
+                  </span>
+                )}
               </div>
-              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate flex items-center gap-1">
+              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                {resistances[0] ? `$${resistances[0].price}` : '—'}
+              </div>
+              <div className="flex items-center gap-1 flex-wrap text-[8px] pt-0.5">
                 {resistances[0] ? (
                   <>
-                    <span>{resistances[0].smc_label || 'Опір'} · S:{Math.round(resistances[0].strength_score || 80)}</span>
-                    {resistances[0].has_fvg && <span className="px-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8px]">FVG</span>}
-                    {resistances[0].swept_liquidity && <span className="px-0.5 rounded bg-purple-500/20 text-purple-400 font-bold text-[8px]">SWEEP</span>}
-                    {resistances[0].zone_location === 'Premium' && <span className="px-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold text-[8px]">PREM</span>}
+                    <span className="text-slate-400 dark:text-gray-500 font-sans">
+                      Сила {Math.round(resistances[0].strength_score || 80)}
+                    </span>
+                    {resistances[0].has_fvg && (
+                      <span className="px-1 py-0.2 rounded bg-amber-500/15 text-amber-500 font-bold">FVG</span>
+                    )}
+                    {resistances[0].swept_liquidity && (
+                      <span className="px-1 py-0.2 rounded bg-purple-500/15 text-purple-400 font-bold">SWEEP</span>
+                    )}
                   </>
-                ) : 'Немає вище'}
+                ) : (
+                  <span className="text-slate-400 text-[9px] font-sans">Немає вище</span>
+                )}
               </div>
             </div>
-            <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-1.5 rounded border border-emerald-500/20">
-              <div className="font-bold flex justify-between">
-                <span>OB DEMAND</span>
-                <span>{supports[0] ? `${supports[0].price}` : '—'}</span>
+
+            {/* Demand (Support) Card */}
+            <div className="bg-white dark:bg-[#161a22] p-2 rounded-lg border border-emerald-200/80 dark:border-emerald-900/40 flex flex-col justify-between space-y-1">
+              <div className="flex items-center justify-between text-[9px]">
+                <span className="font-bold text-emerald-600 dark:text-[#0ecb81] uppercase tracking-wider font-sans">
+                  OB DEMAND
+                </span>
+                {supports[0] && (
+                  <span className="font-bold text-[#0ecb81]">
+                    {supports[0].distPct?.toFixed(1)}%
+                  </span>
+                )}
               </div>
-              <div className="text-[9px] text-slate-400 dark:text-gray-500 truncate flex items-center gap-1">
+              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                {supports[0] ? `$${supports[0].price}` : '—'}
+              </div>
+              <div className="flex items-center gap-1 flex-wrap text-[8px] pt-0.5">
                 {supports[0] ? (
                   <>
-                    <span>{supports[0].smc_label || 'Підтримка'} · S:{Math.round(supports[0].strength_score || 80)}</span>
-                    {supports[0].has_fvg && <span className="px-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8px]">FVG</span>}
-                    {supports[0].swept_liquidity && <span className="px-0.5 rounded bg-purple-500/20 text-purple-400 font-bold text-[8px]">SWEEP</span>}
-                    {supports[0].zone_location === 'Discount' && <span className="px-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold text-[8px]">DISC</span>}
+                    <span className="text-slate-400 dark:text-gray-500 font-sans">
+                      Сила {Math.round(supports[0].strength_score || 80)}
+                    </span>
+                    {supports[0].has_fvg && (
+                      <span className="px-1 py-0.2 rounded bg-amber-500/15 text-amber-500 font-bold">FVG</span>
+                    )}
+                    {supports[0].swept_liquidity && (
+                      <span className="px-1 py-0.2 rounded bg-purple-500/15 text-purple-400 font-bold">SWEEP</span>
+                    )}
                   </>
-                ) : 'Немає нижче'}
+                ) : (
+                  <span className="text-slate-400 text-[9px] font-sans">Немає нижче</span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2">
-          ЗОНИ ТА РІВНІ · {allLevelsCount}
-        </div>
+        {/* 5. Levels List with Zero Truncation */}
+        <div>
+          <div className="text-slate-500 dark:text-gray-400 text-[11px] font-semibold tracking-wider uppercase mb-2 flex items-center justify-between">
+            <span>ЗОНИ ТА РІВНІ · {allLevelsCount}</span>
+            <span className="text-[10px] text-slate-400 font-normal lowercase">ціна / діапазон / сила</span>
+          </div>
 
-        <div className="space-y-1 font-mono">
-          {/* Resistances (Red Dots) */}
-          {resistances.map((r, idx) => (
-            <div
-              key={`r-${idx}`}
-              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#15191e] transition text-[11px]"
-            >
-              <div className="flex items-center gap-1.5 text-slate-700 dark:text-gray-300 overflow-hidden">
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${r.smc_type === 'BREAKER_BLOCK' ? 'bg-amber-500' : 'bg-[#f6465d]'}`} />
-                {r.smc_label && (
-                  <span
-                    className={`px-1 py-0.2 rounded text-[9px] font-bold flex-shrink-0 ${
-                      r.smc_type === 'ORDER_BLOCK'
-                        ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300'
-                        : r.smc_type === 'BREAKER_BLOCK'
-                        ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300'
-                        : 'bg-red-500/20 text-red-500 dark:text-red-300'
-                    }`}
-                  >
-                    {r.smc_label}
+          <div className="space-y-1.5 font-mono">
+            {/* Resistances (Red Dots) */}
+            {resistances.map((r, idx) => (
+              <div
+                key={`r-${idx}`}
+                className="p-2 rounded-lg bg-white dark:bg-[#13171e] border border-slate-200/80 dark:border-[#1e2329] hover:border-slate-300 dark:hover:border-gray-600 transition space-y-1 shadow-2xs"
+              >
+                {/* Row 1: Badges & Label on Left, Distance % on Right */}
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.smc_type === 'BREAKER_BLOCK' ? 'bg-amber-500' : 'bg-[#f6465d]'}`} />
+                    <span className="font-semibold text-xs font-sans text-slate-800 dark:text-gray-100 whitespace-nowrap">
+                      {r.smc_label || (r.smc_type === 'BREAKER_BLOCK' ? 'Breaker' : 'Опір')}
+                    </span>
+                    {r.timeframe && (
+                      <span className="px-1 py-0.2 rounded bg-blue-500/15 text-blue-500 dark:text-blue-300 text-[9px] font-bold">
+                        {r.timeframe.toUpperCase()}
+                      </span>
+                    )}
+                    {r.has_fvg && (
+                      <span className="px-1 py-0.2 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold" title="Fair Value Gap Imbalance">
+                        FVG
+                      </span>
+                    )}
+                    {r.swept_liquidity && (
+                      <span className="px-1 py-0.2 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold" title="Зняття ліквідності (Sweep)">
+                        SWEEP
+                      </span>
+                    )}
+                    {r.zone_location && (
+                      <span className={`px-1 py-0.2 rounded text-[8px] font-bold ${r.zone_location === 'Premium' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-teal-500/15 text-teal-400'}`}>
+                        {r.zone_location === 'Premium' ? 'PREM' : 'DISC'}
+                      </span>
+                    )}
+                    {r.status && r.status !== 'active' && (
+                      <span className="text-[8px] font-bold px-1 py-0.2 rounded bg-blue-500/15 text-blue-400">
+                        {r.status === 'retested' ? 'Ретест' : 'Ослабл'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-bold text-xs flex-shrink-0 text-[#f6465d] whitespace-nowrap">
+                    {r.distPct >= 0 ? `+${r.distPct.toFixed(2)}%` : `${r.distPct.toFixed(2)}%`}
                   </span>
-                )}
-                {r.pivot_label && !r.smc_label && (
-                  <span className="px-1 py-0.2 rounded text-[9px] font-bold flex-shrink-0 bg-purple-500/20 text-purple-600 dark:text-purple-300">
-                    {r.pivot_label}
-                  </span>
-                )}
-                {r.timeframe && (
-                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
-                    {r.timeframe.replace('h', 'H').replace('d', 'D')}
-                  </span>
-                )}
-                {r.has_fvg && (
-                  <span className="px-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold flex-shrink-0" title="Fair Value Gap Imbalance">
-                    FVG
-                  </span>
-                )}
-                {r.swept_liquidity && (
-                  <span className="px-0.5 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold flex-shrink-0" title="Зняття ліквідності (Sweep)">
-                    SWEEP
-                  </span>
-                )}
-                {r.zone_location && (
-                  <span className={`px-0.5 rounded text-[8px] font-bold flex-shrink-0 ${r.zone_location === 'Premium' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-teal-500/15 text-teal-400'}`} title={`Matrix: ${r.zone_location}`}>
-                    {r.zone_location === 'Premium' ? 'PREM' : 'DISC'}
-                  </span>
-                )}
-                <span title={`Діапазон зони: ${r.bottom} - ${r.top}`} className="truncate">
-                  {r.smc_label || 'Опір'} {r.price} {r.touches > 1 ? <span className="text-slate-400 dark:text-gray-500">x{r.touches}</span> : ''}
-                </span>
-                {/* strength_score progress bar */}
-                {r.strength_score !== undefined && (
-                  <span className="flex items-center gap-1 ml-1 flex-shrink-0">
-                    <span
-                      className="inline-block h-1.5 rounded-full bg-[#f6465d]/60"
-                      style={{ width: `${Math.round(r.strength_score / 100 * 28)}px`, minWidth: '2px' }}
-                    />
-                    <span className="text-[9px] text-slate-400 dark:text-gray-500">{Math.round(r.strength_score)}</span>
-                  </span>
-                )}
-                {/* status badge (skip 'active') */}
-                {r.status && r.status !== 'active' && (
-                  <span
-                    className={`text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${
-                      r.status === 'retested'
-                        ? 'bg-blue-500/15 text-blue-500 dark:text-blue-400'
-                        : 'bg-amber-500/15 text-amber-600 dark:text-yellow-400'
-                    }`}
-                  >
-                    {r.status === 'retested' ? 'Ретест' : 'Ослабл'}
-                  </span>
-                )}
+                </div>
+
+                {/* Row 2: Price and Range on Left, Strength Progress Bar on Right */}
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-[#191e25]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      ${r.price}
+                    </span>
+                    {r.bottom && r.top && (
+                      <span className="text-[10px] text-slate-400 dark:text-gray-500 truncate" title={`Діапазон зони: ${r.bottom} — ${r.top}`}>
+                        ({r.bottom} — {r.top})
+                      </span>
+                    )}
+                    {r.touches > 1 && (
+                      <span className="text-[10px] text-slate-400 dark:text-gray-500 font-sans flex-shrink-0">
+                        x{r.touches}
+                      </span>
+                    )}
+                  </div>
+
+                  {r.strength_score !== undefined && (
+                    <div className="flex items-center gap-1 flex-shrink-0 text-[10px] text-slate-400">
+                      <span className="w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden flex">
+                        <span 
+                          className="h-full bg-rose-500/80 rounded-full" 
+                          style={{ width: `${Math.min(100, Math.round(r.strength_score))}%` }} 
+                        />
+                      </span>
+                      <span className="font-semibold">{Math.round(r.strength_score)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <span className="font-semibold flex-shrink-0 ml-1 text-[#f6465d]">
-                {r.distPct >= 0 ? `+${r.distPct.toFixed(2)}%` : `${r.distPct.toFixed(2)}%`}
-              </span>
-            </div>
-          ))}
+            ))}
 
-          {/* Supports (Green Dots) */}
-          {supports.map((s, idx) => (
-            <div
-              key={`s-${idx}`}
-              className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#15191e] transition text-[11px]"
-            >
-              <div className="flex items-center gap-1.5 text-slate-700 dark:text-gray-300 overflow-hidden">
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.smc_type === 'BREAKER_BLOCK' ? 'bg-blue-500' : 'bg-[#0ecb81]'}`} />
-                {s.smc_label && (
-                  <span
-                    className={`px-1 py-0.2 rounded text-[9px] font-bold flex-shrink-0 ${
-                      s.smc_type === 'ORDER_BLOCK'
-                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
-                        : s.smc_type === 'BREAKER_BLOCK'
-                        ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300'
-                        : 'bg-teal-500/20 text-teal-600 dark:text-teal-300'
-                    }`}
-                  >
-                    {s.smc_label}
+            {/* Supports (Green Dots) */}
+            {supports.map((s, idx) => (
+              <div
+                key={`s-${idx}`}
+                className="p-2 rounded-lg bg-white dark:bg-[#13171e] border border-slate-200/80 dark:border-[#1e2329] hover:border-slate-300 dark:hover:border-gray-600 transition space-y-1 shadow-2xs"
+              >
+                {/* Row 1: Badges & Label on Left, Distance % on Right */}
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.smc_type === 'BREAKER_BLOCK' ? 'bg-blue-500' : 'bg-[#0ecb81]'}`} />
+                    <span className="font-semibold text-xs font-sans text-slate-800 dark:text-gray-100 whitespace-nowrap">
+                      {s.smc_label || (s.smc_type === 'BREAKER_BLOCK' ? 'Breaker' : 'Підтримка')}
+                    </span>
+                    {s.timeframe && (
+                      <span className="px-1 py-0.2 rounded bg-blue-500/15 text-blue-500 dark:text-blue-300 text-[9px] font-bold">
+                        {s.timeframe.toUpperCase()}
+                      </span>
+                    )}
+                    {s.has_fvg && (
+                      <span className="px-1 py-0.2 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold" title="Fair Value Gap Imbalance">
+                        FVG
+                      </span>
+                    )}
+                    {s.swept_liquidity && (
+                      <span className="px-1 py-0.2 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold" title="Зняття ліквідності (Sweep)">
+                        SWEEP
+                      </span>
+                    )}
+                    {s.zone_location && (
+                      <span className={`px-1 py-0.2 rounded text-[8px] font-bold ${s.zone_location === 'Discount' ? 'bg-teal-500/15 text-teal-400' : 'bg-indigo-500/15 text-indigo-400'}`}>
+                        {s.zone_location === 'Discount' ? 'DISC' : 'PREM'}
+                      </span>
+                    )}
+                    {s.status && s.status !== 'active' && (
+                      <span className="text-[8px] font-bold px-1 py-0.2 rounded bg-blue-500/15 text-blue-400">
+                        {s.status === 'retested' ? 'Ретест' : 'Ослабл'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-bold text-xs flex-shrink-0 text-[#0ecb81] whitespace-nowrap">
+                    {s.distPct >= 0 ? `+${s.distPct.toFixed(2)}%` : `${s.distPct.toFixed(2)}%`}
                   </span>
-                )}
-                {s.pivot_label && !s.smc_label && (
-                  <span className="px-1 py-0.2 rounded text-[9px] font-bold flex-shrink-0 bg-purple-500/20 text-purple-600 dark:text-purple-300">
-                    {s.pivot_label}
-                  </span>
-                )}
-                {s.timeframe && (
-                  <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9px] font-bold flex-shrink-0">
-                    {s.timeframe.replace('h', 'H').replace('d', 'D')}
-                  </span>
-                )}
-                {s.has_fvg && (
-                  <span className="px-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold flex-shrink-0" title="Fair Value Gap Imbalance">
-                    FVG
-                  </span>
-                )}
-                {s.swept_liquidity && (
-                  <span className="px-0.5 rounded bg-purple-500/15 text-purple-400 text-[8px] font-bold flex-shrink-0" title="Зняття ліквідності (Sweep)">
-                    SWEEP
-                  </span>
-                )}
-                {s.zone_location && (
-                  <span className={`px-0.5 rounded text-[8px] font-bold flex-shrink-0 ${s.zone_location === 'Discount' ? 'bg-teal-500/15 text-teal-400' : 'bg-indigo-500/15 text-indigo-400'}`} title={`Matrix: ${s.zone_location}`}>
-                    {s.zone_location === 'Discount' ? 'DISC' : 'PREM'}
-                  </span>
-                )}
-                <span title={`Діапазон зони: ${s.bottom} - ${s.top}`} className="truncate">
-                  {s.smc_label || 'Підтримка'} {s.price} {s.touches > 1 ? <span className="text-slate-400 dark:text-gray-500">x{s.touches}</span> : ''}
-                </span>
-                {/* strength_score progress bar */}
-                {s.strength_score !== undefined && (
-                  <span className="flex items-center gap-1 ml-1 flex-shrink-0">
-                    <span
-                      className="inline-block h-1.5 rounded-full bg-[#0ecb81]/60"
-                      style={{ width: `${Math.round(s.strength_score / 100 * 28)}px`, minWidth: '2px' }}
-                    />
-                    <span className="text-[9px] text-slate-400 dark:text-gray-500">{Math.round(s.strength_score)}</span>
-                  </span>
-                )}
-                {/* status badge (skip 'active') */}
-                {s.status && s.status !== 'active' && (
-                  <span
-                    className={`text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${
-                      s.status === 'retested'
-                        ? 'bg-blue-500/15 text-blue-500 dark:text-blue-400'
-                        : 'bg-amber-500/15 text-amber-600 dark:text-yellow-400'
-                    }`}
-                  >
-                    {s.status === 'retested' ? 'Ретест' : 'Ослабл'}
-                  </span>
-                )}
+                </div>
+
+                {/* Row 2: Price and Range on Left, Strength Progress Bar on Right */}
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-[#191e25]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      ${s.price}
+                    </span>
+                    {s.bottom && s.top && (
+                      <span className="text-[10px] text-slate-400 dark:text-gray-500 truncate" title={`Діапазон зони: ${s.bottom} — ${s.top}`}>
+                        ({s.bottom} — {s.top})
+                      </span>
+                    )}
+                    {s.touches > 1 && (
+                      <span className="text-[10px] text-slate-400 dark:text-gray-500 font-sans flex-shrink-0">
+                        x{s.touches}
+                      </span>
+                    )}
+                  </div>
+
+                  {s.strength_score !== undefined && (
+                    <div className="flex items-center gap-1 flex-shrink-0 text-[10px] text-slate-400">
+                      <span className="w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden flex">
+                        <span 
+                          className="h-full bg-emerald-500/80 rounded-full" 
+                          style={{ width: `${Math.min(100, Math.round(s.strength_score))}%` }} 
+                        />
+                      </span>
+                      <span className="font-semibold">{Math.round(s.strength_score)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <span className="font-semibold flex-shrink-0 ml-1 text-[#0ecb81]">
-                {s.distPct.toFixed(2)}%
-              </span>
-            </div>
-          ))}
+            ))}
 
-          {allLevelsCount === 0 && (
-            <div className="text-slate-400 dark:text-gray-600 text-center py-4">Зон не виявлено</div>
-          )}
+            {allLevelsCount === 0 && (
+              <div className="text-slate-400 dark:text-gray-600 text-center py-4 bg-slate-50/50 dark:bg-[#14181e] rounded-lg border border-slate-200/60 dark:border-[#1e2329]">
+                Зон не виявлено
+              </div>
+            )}
+          </div>
         </div>
       </div>
       </div>
