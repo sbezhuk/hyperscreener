@@ -1,4 +1,4 @@
-import { Timeframe, normalizeTimeframe, FormationFilter } from '../types';
+import { Timeframe, normalizeTimeframe, FormationFilter, ChartDrawing, ChartDrawingPoint } from '../types';
 
 export const STORAGE_KEYS = {
   SELECTED_COIN: 'hyperscreener:selected_coin',
@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   SELECTED_TFS: 'hyperscreener:selected_tfs',
   MIN_STRENGTH: 'hyperscreener:min_strength',
   ONLY_CONFIRMED_OI: 'hyperscreener:only_confirmed_oi',
+  CHART_MODE: 'hyperscreener:chart_mode',
   DRAWINGS_PREFIX: 'hyperscreener:drawings:',
 } as const;
 
@@ -233,29 +234,38 @@ export function saveConfirmedOi(enabled: boolean): void {
   safeSetItem(STORAGE_KEYS.ONLY_CONFIRMED_OI, String(enabled));
 }
 
+/**
+ * Resolves initial chart mode ('formations' | 'native_tv')
+ */
+export function getInitialChartMode(defaultMode: 'formations' | 'native_tv' = 'formations'): 'formations' | 'native_tv' {
+  const query = getQueryParams();
+  if (query) {
+    const fromUrl = query.get('chart_mode') || query.get('mode');
+    if (fromUrl === 'native_tv' || fromUrl === 'tv') {
+      return 'native_tv';
+    }
+    if (fromUrl === 'formations') {
+      return 'formations';
+    }
+  }
+
+  const fromStorage = safeGetItem(STORAGE_KEYS.CHART_MODE);
+  if (fromStorage === 'native_tv' || fromStorage === 'formations') {
+    return fromStorage;
+  }
+
+  return defaultMode;
+}
+
+export function saveChartMode(mode: 'formations' | 'native_tv'): void {
+  safeSetItem(STORAGE_KEYS.CHART_MODE, mode);
+}
+
 // -----------------------------------------------------------------------------
 // TradingView Drawing Tools State Persistence Interface & Helpers
 // -----------------------------------------------------------------------------
 
-export interface ChartDrawingPoint {
-  time: number;
-  price: number;
-}
-
-export interface ChartDrawing {
-  id: string;
-  type: 'trendline' | 'horizontal_line' | 'ray' | 'rectangle' | 'fibonacci' | string;
-  coin: string;
-  timeframe?: string;
-  points: ChartDrawingPoint[];
-  text?: string;
-  color?: string;
-  lineWidth?: number;
-  lineStyle?: number;
-  properties?: Record<string, any>;
-  createdAt: number;
-  updatedAt: number;
-}
+export type { ChartDrawing, ChartDrawingPoint };
 
 /**
  * Returns saved drawings for the specified coin.

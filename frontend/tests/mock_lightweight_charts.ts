@@ -49,6 +49,8 @@ export const mockCandleSeries = {
   removePriceLine: () => {},
   attachPrimitive: () => {},
   barsInLogicalRange: (range: any) => ({ barsBefore: 50, barsAfter: 5 }),
+  coordinateToPrice: (_y: any) => 2500,
+  priceToCoordinate: (_p: any) => 150,
 };
 
 export const mockTimeScale = {
@@ -60,6 +62,9 @@ export const mockTimeScale = {
     chartSpies.setVisibleLogicalRangeCalls.push(range);
   },
   getVisibleLogicalRange: () => ({ from: 500, to: 612 }),
+  coordinateToTime: (_x: any) => 1700000000,
+  timeToCoordinate: (_t: any) => 100,
+  coordinateToLogical: (_x: any) => 10,
 };
 
 export const mockChartApi = {

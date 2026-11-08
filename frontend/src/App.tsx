@@ -5,6 +5,7 @@ import { Chart } from './components/Chart';
 import { SidebarLevels } from './components/SidebarLevels';
 import { ScreenerModal } from './components/ScreenerModal';
 import { AlertToast } from './components/AlertToast';
+import { TradingViewWidget } from './components/TradingViewWidget';
 import { Timeframe, normalizeTimeframe, FormationFilter, AnalysisData, CoinMeta, ScreenerItem, LevelItem, FVGItem, FVGConfluenceItem, Candle, ConnectionState, WSConnectionDetails, SignalItem } from './types';
 import {
   getInitialCoin,
@@ -19,6 +20,8 @@ import {
   saveMinStrength,
   getInitialConfirmedOi,
   saveConfirmedOi,
+  getInitialChartMode,
+  saveChartMode,
   syncUrlState,
 } from './utils/storage';
 
@@ -29,6 +32,7 @@ export function App() {
   const [selectedCoin, setSelectedCoin] = useState<string>(() => getInitialCoin('ETH'));
   const [timeframe, setTimeframe] = useState<Timeframe>(() => getInitialTimeframe('1D'));
   const [activeFormation, setActiveFormation] = useState<FormationFilter>(() => getInitialFormation('CASCADE'));
+  const [chartMode, setChartMode] = useState<'formations' | 'native_tv'>(() => getInitialChartMode('formations'));
   
   // Multi-Timeframe Controls: by default initialized from storage or active timeframe
   const [selectedTfs, setSelectedTfs] = useState<string[]>(() => {
@@ -92,6 +96,10 @@ export function App() {
   useEffect(() => {
     saveConfirmedOi(onlyConfirmedOi);
   }, [onlyConfirmedOi]);
+
+  useEffect(() => {
+    saveChartMode(chartMode);
+  }, [chartMode]);
 
   // 1. Fetch Coins List on mount
   useEffect(() => {
@@ -922,6 +930,8 @@ export function App() {
         oiData={analysis?.oi}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         isSidebarOpen={isSidebarOpen}
+        chartMode={chartMode}
+        onChartModeChange={setChartMode}
       />
 
       {/* Formations & Multi-Timeframe Filter Bar */}
@@ -939,7 +949,9 @@ export function App() {
       {/* Main Workspace (Chart + Right Sidebar) */}
       <div className="flex flex-1 overflow-hidden relative">
         <main className="flex-1 min-w-0 h-full relative">
-          {analysis && analysis.candles && analysis.candles.length > 0 && analysis.coin?.toUpperCase() === selectedCoin.toUpperCase() ? (
+          {chartMode === 'native_tv' ? (
+            <TradingViewWidget coin={selectedCoin} timeframe={timeframe} />
+          ) : analysis && analysis.candles && analysis.candles.length > 0 && analysis.coin?.toUpperCase() === selectedCoin.toUpperCase() ? (
             <>
               <Chart
                 candles={analysis.candles}

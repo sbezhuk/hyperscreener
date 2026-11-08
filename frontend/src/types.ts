@@ -14,6 +14,41 @@ export function normalizeTimeframe(tf?: string): Timeframe {
 
 export type FormationFilter = 'NONE' | 'CASCADE' | 'SWEEP' | 'TRENDLINE' | 'FVG';
 
+export type DrawingToolType =
+  | 'cursor'
+  | 'trendline'
+  | 'ray'
+  | 'horizontal'
+  | 'horizontal_ray'
+  | 'rectangle'
+  | 'fibonacci'
+  | 'text'
+  | 'ruler'
+  | 'brush'
+  | 'eraser';
+
+export interface ChartDrawingPoint {
+  time: number;
+  price: number;
+}
+
+export interface ChartDrawing {
+  id: string;
+  type: DrawingToolType | string;
+  coin: string;
+  timeframe?: string;
+  points: ChartDrawingPoint[];
+  text?: string;
+  color?: string;
+  lineWidth?: number;
+  lineStyle?: number; // 0: Solid, 1: Dotted, 2: Dashed
+  fillColor?: string;
+  fillOpacity?: number;
+  properties?: Record<string, any>;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
 export interface WSConnectionDetails {

@@ -17,6 +17,8 @@ interface TopBarProps {
   oiData?: OIData;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  chartMode?: 'formations' | 'native_tv';
+  onChartModeChange?: (mode: 'formations' | 'native_tv') => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -33,6 +35,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   oiData,
   onToggleSidebar,
   isSidebarOpen,
+  chartMode = 'formations',
+  onChartModeChange,
 }) => {
   const { themePreference, resolvedTheme, setThemePreference } = useTheme();
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1D'];
@@ -316,6 +320,34 @@ export const TopBar: React.FC<TopBarProps> = ({
               <span className="text-[11px]">Авто</span>
             </button>
           </div>
+
+          {/* Chart Engine Mode Switcher: Formations vs Native TradingView */}
+          {onChartModeChange && (
+            <div className="flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5 text-xs">
+              <button
+                onClick={() => onChartModeChange('formations')}
+                className={`px-2 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
+                  chartMode === 'formations'
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-[#0ecb81] border border-emerald-500/40 shadow-sm'
+                    : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="Режим аналізу формацій: рівні, SMC, FVG, свайпи Hyperliquid"
+              >
+                Формації
+              </button>
+              <button
+                onClick={() => onChartModeChange('native_tv')}
+                className={`px-2 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
+                  chartMode === 'native_tv'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="Нативний TradingView з повною панеллю інструментів малювання"
+              >
+                TradingView
+              </button>
+            </div>
+          )}
 
           {/* Desktop Timeframe selector */}
           <div className="flex items-center bg-slate-100 dark:bg-[#15191e] border border-slate-300 dark:border-[#23272e] rounded p-0.5">
