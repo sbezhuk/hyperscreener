@@ -13,7 +13,7 @@
 Тепер весь дослідницький конвеєр функціонує на базі централізованого динамічного discovery-модуля:
 1. **Динамічне відкриття ринку (`discover_available_assets`)**: опитує активний всесвіт деривативів Hyperliquid через API в режимі реального часу, автоматично виключає делістинговані або неактивні пари та ранжує активи за 24-годинним ліквідним обсягом (виявлено **179 активних безстрокових контрактів**, з яких 43 мають добовий обсяг > \$1M).
 2. **Динамічне визначення таймфреймів (`discover_supported_timeframes`)**: підтримує всі 11 нативних інтервалів біржі (`1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`) з автоматичним кроком секунд та детермінованим мапінгом HTF-контексту.
-3. **Ізольована архітектура кешування (`ResearchDatasetCache`)**: старий монолітний файл `phase6_raw_candles.json` замінено на повністю ізольовані файли `scratch/cache/datasets/{COIN}_{TF}.json`. Кожен файл містить стандартизовані метадані валідності, контролю розривів (gaps), дублікатів та Point-in-Time безпеки.
+3. **Ізольована архітектура кешування (`ResearchDatasetCache`)**: старий монолітний файл `raw_candles_dataset.json` замінено на повністю ізольовані файли `scratch/cache/datasets/{COIN}_{TF}.json`. Кожен файл містить стандартизовані метадані валідності, контролю розривів (gaps), дублікатів та Point-in-Time безпеки.
 4. **Рефакторинг 100% дослідницьких скриптів**: усі скрипти Phases 3, 4, 4.5/4.6, 5.1, 5.2 та 6 переведені на єдиний інтерфейс виявлення. Жодного захардкодженного списку монет чи таймфреймів не залишилося в дослідницьких модулях.
 5. **Повна верифікація**: розроблено 10 нових інтеграційних тестів, успішно пройдено повний набір із **149 backend тестів**, **41 frontend тестів** та виконано чистий production-білд.
 
@@ -57,23 +57,23 @@ scratch/
 
 Усі скрипти в каталозі `scratch/` успішно рефакторено на використання динамічного discovery:
 
-1. **Phase 6 Scripts**:
-   - `scratch/phase6_dataset_audit.py`: повний аудит ліквідного ринку з виявленням 43+ пар та перевіркою 30 пар/таймфреймів на розриви (0 gaps, 0 duplicates, 100% valid).
-   - `scratch/phase6_trading_intelligence_research.py`: динамічне завантаження Top-10 ліквідних активів замість фіксованих 5.
-2. **Phase 5 Scripts**:
-   - `scratch/phase5_1_trading_context_research.py`: динамічне дослідження торгового контексту для активів Hyperliquid.
-   - `scratch/phase5_2_e2e_audit.py`: e2e верифікація збагачення сигналів структурним контекстом трендових ліній.
-3. **Phase 4 Scripts**:
-   - `scratch/phase4_statistical_audit.py`: аудит статистичного вирівнювання за старшими таймфреймами.
-   - `scratch/phase4_live_market_verification.py`: верифікація живого ринку для динамічно відібраних активів.
-   - `scratch/phase4_independent_audit_suite.py`: повна перевірка HTF-кешу та продуктивності на динамічному всесвіті.
+1. **Dataset & Intelligence Scripts**:
+   - `scratch/dataset_integrity_audit.py`: повний аудит ліквідного ринку з виявленням 43+ пар та перевіркою 30 пар/таймфреймів на розриви (0 gaps, 0 duplicates, 100% valid).
+   - `scratch/trading_intelligence_research.py`: динамічне завантаження Top-10 ліквідних активів замість фіксованих 5.
+2. **Context & E2E Integration Scripts**:
+   - `scratch/trading_context_research.py`: динамічне дослідження торгового контексту для активів Hyperliquid.
+   - `scratch/signal_enrichment_e2e_audit.py`: e2e верифікація збагачення сигналів структурним контекстом трендових ліній.
+3. **Statistical & Independent Audit Scripts**:
+   - `scratch/htf_statistical_audit.py`: аудит статистичного вирівнювання за старшими таймфреймами.
+   - `scratch/live_market_verification.py`: верифікація живого ринку для динамічно відібраних активів.
+   - `scratch/independent_audit_suite.py`: повна перевірка HTF-кешу та продуктивності на динамічному всесвіті.
    - `scratch/point_in_time_validator.py` та `point_in_time_validator_v2.py`: валідація відсутності Look-Ahead Bias на довільних інструментах.
-4. **Phase 3 Scripts**:
-   - `scratch/phase3_predictive_validation.py`: дослідження прогностичної сили адаптивної оцінки якості $Q$.
-   - `scratch/phase3_market_regime_research.py`: виявлення ринкових режимів для динамічного кошика.
-   - `scratch/phase3_mtf_context_research.py`: аналіз взаємозв'язків між молодшими та старшими таймфреймами.
-   - `scratch/phase3_liquidity_interaction_research.py`: взаємодія ціни з ліквідністю на базі універсального discovery.
-   - `scratch/phase3_momentum_research.py`: оцінка імпульсу на динамічних наборах даних.
+4. **Market Regime, MTF & Predictive Research Scripts**:
+   - `scratch/predictive_validation.py`: дослідження прогностичної сили адаптивної оцінки якості $Q$.
+   - `scratch/market_regime_research.py`: виявлення ринкових режимів для динамічного кошика.
+   - `scratch/mtf_context_research.py`: аналіз взаємозв'язків між молодшими та старшими таймфреймами.
+   - `scratch/liquidity_interaction_research.py`: взаємодія ціни з ліквідністю на базі універсального discovery.
+   - `scratch/momentum_research.py`: оцінка імпульсу на динамічних наборах даних.
 5. **Supporting & Calibration Tools**:
    - `scratch/compression_threshold_study.py`: калібрування компресії на живих інструментах ринку.
    - `scratch/compression_validation_deep_dive.py`: глибока перевірка компресійних формацій.

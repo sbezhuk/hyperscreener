@@ -39,7 +39,7 @@ SL_ATR_MULT = 1.0
 FEE_PCT = 0.0005        # 0.05% taker fee
 SLIPPAGE_PCT = 0.0002    # 0.02% slippage
 
-RESULTS_OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "phase6_simulation_results.json")
+RESULTS_OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "trading_intelligence_simulation_results.json")
 
 
 def wilson_score_ci(successes: int, total: int, z: float = 1.96) -> Tuple[float, float, float]:
