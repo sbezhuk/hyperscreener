@@ -36,7 +36,7 @@ export const ScreenerModal: React.FC<ScreenerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 dark:bg-black/60 backdrop-blur-sm flex justify-start select-none">
-      <div className="w-full max-w-md h-full bg-white dark:bg-[#0e1114] border-r border-slate-200 dark:border-[#1e2329] flex flex-col shadow-2xl animate-in slide-in-from-left duration-200 transition-colors">
+      <div className="w-full max-w-full sm:max-w-md h-full bg-white dark:bg-[#0e1114] border-r border-slate-200 dark:border-[#1e2329] flex flex-col shadow-2xl animate-in slide-in-from-left duration-200 transition-colors">
         
         {/* Header */}
         <div className="p-4 border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between">

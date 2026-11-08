@@ -29,7 +29,9 @@ export function App() {
   const [isLoadingEarlier, setIsLoadingEarlier] = useState<boolean>(false);
   const [isScreenerLoading, setIsScreenerLoading] = useState<boolean>(false);
   const [isScreenerOpen, setIsScreenerOpen] = useState<boolean>(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
+  });
   const [wsStatus, setWsStatus] = useState<ConnectionState>('disconnected');
   const [wsDetails, setWsDetails] = useState<WSConnectionDetails>({ state: 'disconnected' });
   const isManualDisconnectRef = useRef<boolean>(false);
@@ -818,7 +820,7 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-100 dark:bg-[#0b0e11] text-slate-900 dark:text-gray-200 overflow-hidden font-sans transition-colors">
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] w-full max-w-full bg-slate-100 dark:bg-[#0b0e11] text-slate-900 dark:text-gray-200 overflow-hidden font-sans transition-colors">
       {/* Top Header */}
       <TopBar
         coin={selectedCoin}
@@ -850,8 +852,8 @@ export function App() {
         wsDetails={wsDetails}
         onToggleWS={handleToggleWS}
         oiData={analysis?.oi}
-        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
-        isSidebarOpen={isMobileSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        isSidebarOpen={isSidebarOpen}
       />
 
       {/* Formations & Multi-Timeframe Filter Bar */}
@@ -868,7 +870,7 @@ export function App() {
 
       {/* Main Workspace (Chart + Right Sidebar) */}
       <div className="flex flex-1 overflow-hidden relative">
-        <main className="flex-1 h-full relative">
+        <main className="flex-1 min-w-0 h-full relative">
           {analysis && analysis.candles && analysis.candles.length > 0 && analysis.coin?.toUpperCase() === selectedCoin.toUpperCase() ? (
             <>
               <Chart
@@ -906,31 +908,34 @@ export function App() {
         </main>
 
         {/* Right Sidebar Desktop View (lg and wider) */}
-        <div className="hidden lg:flex lg:flex-shrink-0">
-          <SidebarLevels
-            resistances={filteredResistances}
-            supports={filteredSupports}
-            signals={analysis?.signals || []}
-            structure={analysis?.structure}
-            openInterest={currentCoinMeta?.openInterest}
-            fundingRate={currentCoinMeta?.fundingRate}
-            activeFormation={activeFormation}
-            onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
-            oiData={analysis?.oi}
-            onlyConfirmedOi={onlyConfirmedOi}
-          />
-        </div>
+        {isSidebarOpen && (
+          <div className="hidden lg:flex flex-shrink-0 w-72 xl:w-80 h-full">
+            <SidebarLevels
+              resistances={filteredResistances}
+              supports={filteredSupports}
+              signals={analysis?.signals || []}
+              structure={analysis?.structure}
+              openInterest={currentCoinMeta?.openInterest}
+              fundingRate={currentCoinMeta?.fundingRate}
+              activeFormation={activeFormation}
+              onSelectSignal={(sig) => handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category)}
+              oiData={analysis?.oi}
+              onlyConfirmedOi={onlyConfirmedOi}
+              onClose={() => setIsSidebarOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Right Sidebar Mobile Slide-over Drawer (< lg) */}
-        {isMobileSidebarOpen && (
+        {isSidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-50 flex justify-end">
             {/* Backdrop overlay */}
             <div
               className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm transition-opacity"
-              onClick={() => setIsMobileSidebarOpen(false)}
+              onClick={() => setIsSidebarOpen(false)}
             />
             {/* Drawer container */}
-            <div className="relative w-80 max-w-[85vw] h-full shadow-2xl z-50 animate-in slide-in-from-right duration-200">
+            <div className="relative w-full max-w-[85vw] sm:w-80 sm:max-w-sm h-full shadow-2xl z-50 animate-in slide-in-from-right duration-200">
               <SidebarLevels
                 resistances={filteredResistances}
                 supports={filteredSupports}
@@ -941,11 +946,11 @@ export function App() {
                 activeFormation={activeFormation}
                 onSelectSignal={(sig) => {
                   handleOpenAlert(sig.coin, sig.interval, sig.time, sig.category);
-                  setIsMobileSidebarOpen(false);
+                  setIsSidebarOpen(false);
                 }}
                 oiData={analysis?.oi}
                 onlyConfirmedOi={onlyConfirmedOi}
-                onClose={() => setIsMobileSidebarOpen(false)}
+                onClose={() => setIsSidebarOpen(false)}
               />
             </div>
           </div>

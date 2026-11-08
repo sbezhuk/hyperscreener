@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { JSDOM } from 'jsdom';
 import { TopBar } from '../src/components/TopBar';
+import { FormationsBar } from '../src/components/FormationsBar';
 import { SidebarLevels } from '../src/components/SidebarLevels';
 import { ThemeProvider } from '../src/context/ThemeContext';
 
@@ -159,5 +160,100 @@ describe('Phase 5.3 — Responsive UI & Drawer Lifecycle Verification', () => {
     assert.match(text, /ЗОНИ ТА РІВНІ/i, 'Levels header must be in Ukrainian');
     assert.match(text, /Опір/i, 'Resistance label must be in Ukrainian');
     assert.match(text, /Підтримка/i, 'Support label must be in Ukrainian');
+  });
+
+  test('6. SidebarLevels formation card maintains responsiveness with multiple badges', () => {
+    const trendlineSignal: any = {
+      id: 'tl-sig-1',
+      coin: 'BTC',
+      interval: '1d',
+      category: 'trendline',
+      title: 'Наклонка (Опір)',
+      direction: 'SHORT',
+      price: 2779.4,
+      time: 1700000000,
+      structural_quality: 96,
+      interaction_state: 'APPROACHING',
+      htf_context: 'AGAINST_HTF',
+      touch_count: 2,
+      distance_to_line_atr: -5.19,
+      compression_ratio: 0.93,
+    };
+
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(SidebarLevels, {
+          resistances: [],
+          supports: [],
+          signals: [trendlineSignal],
+          activeFormation: 'TRENDLINE',
+        })
+      )
+    );
+
+    const text = container.textContent || '';
+    assert.match(text, /Наклонка \(Опір\)/, 'Full title must be rendered without truncation');
+    assert.match(text, /Q:\s*96/, 'Q quality badge must be rendered');
+    assert.match(text, /НАБЛИЖЕННЯ/, 'State badge must be rendered in Ukrainian');
+    assert.match(text, /⚠️ ПРОТИ HTF/, 'HTF risk badge must be rendered');
+    assert.match(text, /SHORT/, 'Direction badge must be rendered');
+
+    // Assert adaptive left-aligned flex-wrap container exists
+    const flexWrapHeader = container.querySelector('.flex.flex-wrap.items-center.gap-x-2');
+    assert.ok(flexWrapHeader, 'Card header must have flex-wrap to prevent losing responsiveness');
+
+    const badgesContainer = container.querySelector('.flex.flex-wrap.items-center.gap-1');
+    assert.ok(badgesContainer, 'Badges container must have flex-wrap and be left-aligned to accommodate multiple badges gracefully');
+    assert.ok(!badgesContainer.classList.contains('ml-auto'), 'Badges must be aligned to the left side without ml-auto');
+  });
+
+  test('7. FormationsBar provides adaptive labels for mobile/desktop without horizontal overflow', () => {
+    const { container } = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'CASCADE',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+      })
+    );
+
+    const barContainer = container.firstElementChild;
+    assert.ok(barContainer?.classList.contains('w-full'), 'FormationsBar container must be w-full');
+    assert.ok(barContainer?.classList.contains('overflow-x-hidden'), 'FormationsBar must hide overflow-x to avoid horizontal scrollbars');
+    assert.ok(barContainer?.classList.contains('flex-wrap'), 'FormationsBar must flex-wrap gracefully');
+
+    // Both full label and mobile label exist in DOM with appropriate responsive classes
+    const text = container.textContent || '';
+    assert.match(text, /Рівні \(підтримка \/ опір\)/, 'Desktop label must be present');
+    assert.match(text, /Рівні/, 'Mobile short label must be present');
+  });
+
+  test('8. TopBar mobile 2-tier responsive layout renders timeframe buttons cleanly', () => {
+    const { container } = rtlRender(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(TopBar, {
+          coin: 'ETH',
+          price: 2239.7,
+          timeframe: '15m',
+          onTimeframeChange: () => {},
+          onOpenScreener: () => {},
+          onRefresh: () => {},
+          isLoading: false,
+          wsStatus: 'connected',
+        })
+      )
+    );
+
+    const mobileTfGrid = container.querySelector('.sm\\:hidden.grid.grid-cols-6');
+    assert.ok(mobileTfGrid, 'Mobile 2nd tier timeframe grid (sm:hidden grid grid-cols-6) must be present for small screens');
+    
+    const tfButtons = mobileTfGrid.querySelectorAll('button');
+    assert.equal(tfButtons.length, 6, 'Must render exactly 6 timeframes in mobile grid');
   });
 });

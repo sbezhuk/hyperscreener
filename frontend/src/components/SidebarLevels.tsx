@@ -47,17 +47,17 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
   const allLevelsCount = resistances.length + supports.length;
 
   return (
-    <aside className="w-full lg:w-80 h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors">
+    <aside className="w-full h-full border-l border-slate-200 dark:border-[#1e2329] bg-white dark:bg-[#0e1114] flex flex-col select-none text-xs transition-colors overflow-hidden">
       
-      {/* Mobile Drawer Header with Close Button */}
+      {/* Sidebar Header with Close Button */}
       {onClose && (
-        <div className="lg:hidden p-3 border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between bg-slate-100 dark:bg-[#15191e]">
+        <div className="p-2.5 sm:p-3 border-b border-slate-200 dark:border-[#1e2329] flex items-center justify-between bg-slate-100 dark:bg-[#15191e] flex-shrink-0">
           <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs uppercase tracking-wider">
             Рівні та формації
           </span>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-[#1e2329] text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition"
+            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-[#1e2329] text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
             title="Закрити панель"
           >
             <X className="w-4 h-4" />
@@ -282,18 +282,18 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 onClick={() => onSelectSignal?.(sig)}
                 className="p-2 rounded bg-slate-50 dark:bg-[#15191e] border border-slate-200 dark:border-[#23272e] hover:border-slate-400 dark:hover:border-gray-500 cursor-pointer transition flex flex-col gap-1"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 overflow-hidden">
-                    <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px] truncate">{sig.title}</span>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-slate-800 dark:text-gray-200 font-semibold text-[11px] leading-snug break-words">{sig.title}</span>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 justify-start">
                     {sig.category === 'trendline' && (
-                      <div className="flex items-center gap-1">
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                      <>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 whitespace-nowrap flex-shrink-0">
                           Q: {Math.round(sig.structural_quality ?? sig.structuralQuality ?? sig.strength ?? 50)}
                         </span>
                         <span
-                          className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                          className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
                             sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
                               ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
                               : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
@@ -324,7 +324,7 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                         </span>
                         {(sig.htf_context || sig.htfContext) && (sig.htf_context !== 'UNAVAILABLE' && sig.htfContext !== 'UNAVAILABLE') && (
                           <span
-                            className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
                               (sig.htf_context === 'AGAINST_HTF' || sig.htfContext === 'AGAINST_HTF')
                                 ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
                                 : (sig.htf_context === 'ALIGNED' || sig.htfContext === 'ALIGNED')
@@ -339,11 +339,11 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                               : 'HTF: НЕЙТР.'}
                           </span>
                         )}
-                      </div>
+                      </>
                     )}
                     {sig.category === 'sweep' && sig.confirmationStatus && (
                       <span
-                        className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                        className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
                           sig.confirmationStatus === 'CONFIRMED'
                             ? 'bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30'
                             : sig.confirmationStatus === 'POTENTIAL'
@@ -369,28 +369,28 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                       const isComp = flags.includes('COMPRESSION') || ctx.isCompression || ctx.is_compression;
 
                       return (
-                        <div className="flex items-center gap-1">
+                        <>
                           {isTier1 && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30">
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-[#0ecb81] border border-emerald-500/30 whitespace-nowrap flex-shrink-0">
                               🛡️ Збіг
                             </span>
                           )}
                           {isAgainstHtf && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-500/20 text-[#f6465d] border border-rose-500/30">
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-500/20 text-[#f6465d] border border-rose-500/30 whitespace-nowrap flex-shrink-0">
                               ⚠️ Проти HTF
                             </span>
                           )}
                           {isComp && (
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30 whitespace-nowrap flex-shrink-0">
                               ⚡ Стиснення
                             </span>
                           )}
-                        </div>
+                        </>
                       );
                     })()}
 
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap flex-shrink-0 ${
                         sig.direction === 'LONG'
                           ? 'bg-emerald-500/20 text-[#0ecb81]'
                           : sig.direction === 'SHORT'
@@ -453,11 +453,11 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                 })()}
 
                 {sig.category === 'trendline' && (
-                  <div className="flex flex-col gap-1 py-1 px-1 bg-slate-100 dark:bg-[#1a1f26] rounded text-[10px] font-mono text-slate-500 dark:text-gray-400">
-                    <div className="flex items-center justify-between">
-                      <span>Дотиків: <b className="text-slate-700 dark:text-gray-300">x{sig.touch_count ?? sig.touchCount ?? 2}</b></span>
-                      <span>Відстань: <b className="text-slate-700 dark:text-gray-300">{(sig.distance_to_line_atr ?? sig.distanceToLineAtr ?? 0).toFixed(2)} ATR</b></span>
-                      <span>Стиснення: <b className="text-slate-700 dark:text-gray-300">{(sig.compression_ratio ?? sig.compressionRatio ?? 1.0).toFixed(2)}</b></span>
+                  <div className="flex flex-col gap-1 py-1 px-1.5 bg-slate-100 dark:bg-[#1a1f26] rounded text-[10px] font-mono text-slate-500 dark:text-gray-400">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                      <div>Дотиків: <b className="text-slate-700 dark:text-gray-300">x{sig.touch_count ?? sig.touchCount ?? 2}</b></div>
+                      <div>Відстань: <b className="text-slate-700 dark:text-gray-300">{(sig.distance_to_line_atr ?? sig.distanceToLineAtr ?? 0).toFixed(2)} ATR</b></div>
+                      <div>Стиснення: <b className="text-slate-700 dark:text-gray-300">{(sig.compression_ratio ?? sig.compressionRatio ?? 1.0).toFixed(2)}</b></div>
                     </div>
                     {((sig.structural_risk_flags && sig.structural_risk_flags.length > 0) || (sig.structuralRiskFlags && sig.structuralRiskFlags.length > 0)) && (
                       <div className="flex items-center gap-1 flex-wrap pt-0.5 border-t border-slate-200 dark:border-slate-800">
