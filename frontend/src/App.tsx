@@ -977,7 +977,7 @@ export function App() {
         isLoading={isScreenerLoading}
       />
 
-      {/* Live Alert Toast in Bottom-Right Corner */}
+      {/* Non-intrusive Live Alert / Signal Notification Pill (Bottom-Left) */}
       {analysis?.signals && (
         <AlertToast
           signals={analysis.signals}

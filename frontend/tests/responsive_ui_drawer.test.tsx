@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { TopBar } from '../src/components/TopBar';
 import { FormationsBar } from '../src/components/FormationsBar';
 import { SidebarLevels } from '../src/components/SidebarLevels';
+import { AlertToast } from '../src/components/AlertToast';
 import { ThemeProvider } from '../src/context/ThemeContext';
 
 // Set up simulated DOM environment
@@ -342,5 +343,55 @@ describe('Phase 5.3 — Responsive UI & Drawer Lifecycle Verification', () => {
     
     const tfButtons = mobileTfGrid.querySelectorAll('button');
     assert.equal(tfButtons.length, 6, 'Must render exactly 6 timeframes in mobile grid');
+  });
+
+  test('10. AlertToast renders non-intrusively in bottom-left and supports minimize/expand lifecycle', () => {
+    const testSignal: any = {
+      id: 'sig-test-1',
+      coin: 'ETH',
+      interval: '1d',
+      category: 'sweep',
+      title: 'Непідтверджений хибний пробій опору',
+      desc: 'Хибний пробій опору 2480.85: повернення під рівень',
+      direction: 'SHORT',
+      price: 2480.85,
+      time: 1700000000,
+    };
+
+    let opened = false;
+    const { container } = rtlRender(
+      React.createElement(AlertToast, {
+        signals: [testSignal],
+        coin: 'ETH',
+        onOpenAlert: () => {
+          opened = true;
+        },
+      })
+    );
+
+    const rootWrapper = container.firstElementChild;
+    assert.ok(rootWrapper?.classList.contains('fixed'), 'Must be positioned fixed');
+    assert.ok(rootWrapper?.classList.contains('bottom-3'), 'Must be placed at bottom-3');
+    assert.ok(rootWrapper?.classList.contains('left-3') || rootWrapper?.classList.contains('sm:left-4'), 'Must be placed in bottom-left away from right sidebar');
+
+    // Check preview text exists
+    assert.match(container.textContent || '', /ETH 1D/, 'Must format interval and coin');
+    assert.match(container.textContent || '', /Непідтверджений хибний пробій опору/, 'Must show title');
+    assert.match(container.textContent || '', /Графік →/, 'Must show quick chart button');
+
+    // Click "Графік →" button
+    const chartBtn = Array.from(container.querySelectorAll('button')).find((b: any) =>
+      b.textContent?.includes('Графік →')
+    );
+    assert.ok(chartBtn, 'Quick action button must exist');
+    rtlFireEvent.click(chartBtn);
+    assert.equal(opened, true, 'Clicking Графік must trigger onOpenAlert callback');
+
+    // After clicking or minimizing, it collapses into floating bell pill
+    assert.match(container.textContent || '', /ETH 1D/, 'Bell pill must remain accessible');
+
+    // Verify close/dismiss button is not rendered (widget cannot be completely closed)
+    const closeBtn = container.querySelector('button[title="Закрити"], button[title="Приховати"]');
+    assert.equal(closeBtn, null, 'Close button must not exist; widget can only be minimized or expanded');
   });
 });
