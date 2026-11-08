@@ -12,6 +12,7 @@ from .trendline import (
     detect_timeframe_trendlines,
     calculate_atr,
     evaluate_htf_structural_context,
+    calculate_linear_regression_channel,
     DEFAULT_COMPRESSION_THRESHOLD,
 )
 from .mtf_trendline import mtf_trendline_manager, HTF_TIMEFRAME_MAP
@@ -407,6 +408,16 @@ async def analyze_coin_data(
     # Ensure active timeframe trendlines are synced
     liquidity_data["trendlines"] = active_tls
 
+    # 3.1 Linear Regression Channel Engine (OLS: y = kx + b)
+    regression_channel = calculate_linear_regression_channel(
+        candles=candles,
+        interval=clean_tf,
+        lookback=60,
+        num_std=2.0
+    )
+    liquidity_data["regressionChannel"] = regression_channel
+    liquidity_data["regression_channel"] = regression_channel
+
     # 3. FVG Engine (MTF when requested, local fast scan when in screener mode)
     if include_mtf:
         mtf_fvg_results = await mtf_fvg_manager.get_all_timeframe_fvgs(
@@ -499,31 +510,120 @@ async def analyze_coin_data(
                 "time": candles[-1]["time"]
             })
 
-    # 3. Trendlines (category: "trendline")
+    # 3. Trendlines (category: "trendline"): Distinct Breakout (with Retest) and Bounce Signals with OI confirmation
+    oi_5m = coin_tracker.compute_interval_delta(300) if coin_tracker else {}
+    oi_delta_pct = oi_5m.get("delta_pct") if oi_5m.get("is_valid") else None
+    oi_delta_val = oi_5m.get("delta") if oi_5m.get("is_valid") else None
+    oi_thresh = coin_tracker.compute_oi_volatility() if coin_tracker else 0.5
+
     for tl in active_tls:
         p1_price = tl.get("start_point", {}).get("price", tl.get("p1", {}).get("price"))
         p2_price = tl.get("end_point", {}).get("price", tl.get("p2", {}).get("price"))
         p2_time = tl.get("end_point", {}).get("time", tl.get("p2", {}).get("time"))
+        line_type = tl.get("line_type", tl.get("type", ""))
+        is_res = "resistance" in line_type or "res" in line_type
+        label_side = "Опір" if is_res else "Підтримка"
+        touch_count = tl.get("touch_count", tl.get("touches", 2))
+        is_confirmed = tl.get("is_confirmed", touch_count >= 3)
+        interaction_state = tl.get("interaction_state", tl.get("interactionState", "ACTIVE"))
+        status = tl.get("status", "ACTIVE")
+        dist_atr = tl.get("distance_to_line_atr", tl.get("distanceToLineAtr", 0.0))
+
+        is_breakout = (status == "BROKEN" or interaction_state in ("BREAKOUT", "RETEST"))
+        is_retest = (interaction_state == "RETEST")
+
+        if is_breakout:
+            signal_type = "BREAKOUT"
+            direction = "LONG" if is_res else "SHORT"
+            if is_retest:
+                title = f"Пробій з ретестом наклонної ({label_side})"
+                desc = f"Підтверджений ретест пробитої наклонної ({p1_price} -> {p2_price}) [{clean_tf}]."
+            else:
+                title = f"Пробій наклонної ({label_side})"
+                desc = f"Імпульсний пробій наклонної лінії ({p1_price} -> {p2_price}) [{clean_tf}]."
+
+            if oi_delta_pct is not None and oi_delta_pct > oi_thresh:
+                oi_confirmed = True
+                status_label = "ІСТИННИЙ ПРОБІЙ (+OI)"
+                badge_color = "green"
+                oi_reason = f"Зростання відкритого інтересу (+{oi_delta_pct:.2f}%) підтверджує набір позицій за пробоєм"
+            elif oi_delta_pct is not None and oi_delta_pct < -oi_thresh:
+                oi_confirmed = False
+                status_label = "ПРОБІЙ НА СКВІЗІ (-OI)"
+                badge_color = "red"
+                oi_reason = f"Спад відкритого інтересу ({oi_delta_pct:.2f}%) свідчить про закриття позицій (ризик хибного пробою)"
+            else:
+                oi_confirmed = False
+                status_label = "ПРОБІЙ (НЕЙТР. OI)"
+                badge_color = "blue"
+                oi_reason = f"Пробій без істотної зміни OI ({oi_delta_pct:+.2f}%)" if oi_delta_pct is not None else "Дані OI відсутні"
+
+        elif abs(dist_atr) <= 0.45 and interaction_state in ("TESTING", "REJECTED", "COMPRESSION"):
+            signal_type = "BOUNCE"
+            direction = "LONG" if not is_res else "SHORT"
+            conf_tag = f" x{touch_count}" + (" [Підтверджена 3+]" if is_confirmed else "")
+            title = f"Відскок від наклонної ({label_side}){conf_tag}"
+            desc = f"Реакція відскоку ціни від наклонної лінії ({p1_price} -> {p2_price}) [{clean_tf}]."
+
+            if oi_delta_pct is not None and oi_delta_pct > 0.05:
+                oi_confirmed = True
+                status_label = "ВІДСКОК + НАБІР OI"
+                badge_color = "green"
+                oi_reason = f"Набір позицій (+{oi_delta_pct:.2f}% OI) на тесті та утриманні лінії"
+            else:
+                oi_confirmed = False
+                status_label = "ВІДСКОК ВІД НАКЛОННОЇ"
+                badge_color = "blue"
+                oi_reason = "Відштовхування ціни від лінії без вираженого накопичення OI"
+
+        else:
+            signal_type = "APPROACH"
+            direction = "LONG" if not is_res else "SHORT"
+            title = tl.get("timeframe_label", tl.get("label", f"Наклонка ({label_side})"))
+            desc = f"Трендова лінія по свінг-точках ({p1_price} -> {p2_price}) [{clean_tf}]"
+            oi_confirmed = False
+            status_label = "АКТИВНА НАКЛОНКА"
+            badge_color = "gray"
+            oi_reason = f"Дистанція до лінії: {dist_atr:.2f} ATR"
+
         signals.append({
             "id": tl.get("id") or f"tl-{clean_tf}-{tl['line_type']}-{p2_price}",
             "coin": coin,
             "interval": interval,
             "category": "trendline",
-            "title": tl.get("timeframe_label", tl.get("label", "Наклонка")),
-            "direction": "LONG" if "support" in tl.get("line_type", tl.get("type", "")) else "SHORT",
-            "desc": f"Трендова лінія по свінг-точках ({p1_price} -> {p2_price}) [{clean_tf}]",
+            "signal_type": signal_type,
+            "signalType": signal_type,
+            "is_retest": is_retest,
+            "isRetest": is_retest,
+            "is_confirmed": is_confirmed,
+            "isConfirmed": is_confirmed,
+            "title": title,
+            "direction": direction,
+            "desc": desc,
             "price": p2_price,
             "time": p2_time,
             "strength": tl.get("structural_quality", tl.get("strength", 50.0)),
-            "status": tl.get("status", "ACTIVE"),
+            "status": status,
+            "statusLabel": status_label,
+            "status_label": status_label,
+            "badgeColor": badge_color,
+            "badge_color": badge_color,
+            "oiConfirmed": oi_confirmed,
+            "oi_confirmed": oi_confirmed,
+            "oiDeltaPct": oi_delta_pct,
+            "oi_delta_pct": oi_delta_pct,
+            "oiDelta": oi_delta_val,
+            "oi_delta": oi_delta_val,
+            "oiReason": oi_reason,
+            "oi_reason": oi_reason,
             "structural_quality": tl.get("structural_quality", 50.0),
-            "interaction_state": tl.get("interaction_state", "ACTIVE"),
+            "interaction_state": interaction_state,
             "structuralQuality": tl.get("structural_quality", 50.0),
-            "interactionState": tl.get("interaction_state", "ACTIVE"),
-            "touch_count": tl.get("touch_count", 2),
-            "touchCount": tl.get("touch_count", 2),
-            "distance_to_line_atr": tl.get("distance_to_line_atr", 0.0),
-            "distanceToLineAtr": tl.get("distance_to_line_atr", 0.0),
+            "interactionState": interaction_state,
+            "touch_count": touch_count,
+            "touchCount": touch_count,
+            "distance_to_line_atr": dist_atr,
+            "distanceToLineAtr": dist_atr,
             "compression_ratio": tl.get("compression_ratio", 1.0),
             "compressionRatio": tl.get("compression_ratio", 1.0),
             "htf_context": tl.get("htf_context", "UNAVAILABLE"),
@@ -601,6 +701,8 @@ async def analyze_coin_data(
         "fvgConfluences": fvg_confluences,
         "trendlines": active_tls,
         "multiTimeframeTrendlines": mtf_trendlines,
+        "regressionChannel": regression_channel,
+        "regression_channel": regression_channel,
         "liquidity": liquidity_data,
         "structure": structure_data,
         "signals": signals,

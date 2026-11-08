@@ -356,6 +356,7 @@ export const Chart: React.FC<ChartProps> = ({
       fvgs,
       trendlines: liquidity?.trendlines || [],
       sweeps: liquidity?.sweeps || [],
+      regressionChannel: liquidity?.regressionChannel || (liquidity as any)?.regression_channel || null,
       activeFormation,
       theme: isDark ? 'dark' : 'light',
       currentTimeframe: interval,

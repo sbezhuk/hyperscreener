@@ -156,12 +156,18 @@ export interface SignalItem {
   time: number;
   scenario?: string;
   badgeColor?: string;
+  badge_color?: string;
   confirmationStatus?: 'CONFIRMED' | 'UNCONFIRMED' | 'POTENTIAL';
   statusLabel?: string;
+  status_label?: string;
   oiConfirmed?: boolean;
+  oi_confirmed?: boolean;
   oiDeltaPct?: number | null;
+  oi_delta_pct?: number | null;
   oiDelta?: number | null;
+  oi_delta?: number | null;
   oiReason?: string;
+  oi_reason?: string;
   oiReasonDesc?: string;
   strength?: number;
 
@@ -184,6 +190,14 @@ export interface SignalItem {
   // Phase 5.2: Enriched Structural Context
   structuralContext?: StructuralContext;
   structural_context?: StructuralContext;
+
+  // Trendline Improved Signals (Breakout & Retest, Bounce, OI)
+  signal_type?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | string;
+  signalType?: 'BREAKOUT' | 'BOUNCE' | 'APPROACH' | string;
+  is_retest?: boolean;
+  isRetest?: boolean;
+  is_confirmed?: boolean;
+  isConfirmed?: boolean;
 }
 
 export interface OIDeltaItem {
@@ -310,6 +324,44 @@ export interface TrendlineItem {
   htfContext?: 'ALIGNED' | 'AGAINST_HTF' | 'NEUTRAL' | 'UNAVAILABLE';
   structural_risk_flags?: string[];
   structuralRiskFlags?: string[];
+
+  // 3-Touch Confirmation Rule
+  is_confirmed?: boolean;
+  isConfirmed?: boolean;
+  confirmation_status?: 'CONFIRMED' | 'FORMING' | string;
+  confirmationStatus?: 'CONFIRMED' | 'FORMING' | string;
+  touches_rule?: string;
+}
+
+export interface RegressionChannelItem {
+  id: string;
+  timeframe: string;
+  slope: number;
+  intercept: number;
+  r_squared: number;
+  rSquared?: number;
+  std_dev: number;
+  stdDev?: number;
+  num_std: number;
+  numStd?: number;
+  direction: 'ASCENDING' | 'DESCENDING' | 'FLAT';
+  sample_size: number;
+  channel_position_pct: number;
+  channelPositionPct?: number;
+  start_time: number;
+  end_time: number;
+  middle: {
+    p1: { time: number; price: number };
+    p2: { time: number; price: number };
+  };
+  upper?: {
+    p1: { time: number; price: number };
+    p2: { time: number; price: number };
+  };
+  lower?: {
+    p1: { time: number; price: number };
+    p2: { time: number; price: number };
+  };
 }
 
 export interface AnalysisData {
@@ -336,6 +388,8 @@ export interface AnalysisData {
   fvgConfluences?: FVGConfluenceItem[];
   trendlines?: TrendlineItem[];
   multiTimeframeTrendlines?: Record<string, TrendlineItem[]>;
+  regressionChannel?: RegressionChannelItem | null;
+  regression_channel?: RegressionChannelItem | null;
   liquidity: {
     pools: Array<{
       type: string;
@@ -368,6 +422,8 @@ export interface AnalysisData {
       oiReasonDesc?: string;
     }>;
     trendlines: TrendlineItem[];
+    regressionChannel?: RegressionChannelItem | null;
+    regression_channel?: RegressionChannelItem | null;
   };
   structure: {
     trend: 'BULLISH' | 'BEARISH' | 'EXPANDING' | 'CONSOLIDATING' | 'NEUTRAL';

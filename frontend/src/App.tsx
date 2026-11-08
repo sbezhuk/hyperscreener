@@ -800,15 +800,19 @@ export function App() {
       (tl) => !tl.timeframe || tl.timeframe.toLowerCase() === currentTf
     );
 
+    const regressionChan = analysis.regressionChannel || analysis.regression_channel || analysis.liquidity?.regressionChannel || analysis.liquidity?.regression_channel || null;
+
     if (!onlyConfirmedOi || activeFormation !== 'SWEEP') {
       return {
         ...analysis.liquidity,
         trendlines: timeframeTrendlines,
+        regressionChannel: regressionChan,
       };
     }
     return {
       ...analysis.liquidity,
       trendlines: timeframeTrendlines,
+      regressionChannel: regressionChan,
       sweeps: (analysis.liquidity.sweeps || []).filter((sw) => sw.oiConfirmed),
     };
   }, [analysis?.liquidity, analysis?.trendlines, onlyConfirmedOi, activeFormation, timeframe]);

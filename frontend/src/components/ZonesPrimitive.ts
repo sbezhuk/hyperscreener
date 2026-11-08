@@ -5,7 +5,7 @@ import {
   ISeriesPrimitivePaneRenderer,
   Time,
 } from 'lightweight-charts';
-import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter, LiquiditySweepItem, TrendlineItem } from '../types';
+import { LevelItem, FVGItem, FVGConfluenceItem, FormationFilter, LiquiditySweepItem, TrendlineItem, RegressionChannelItem } from '../types';
 
 export interface ZonesPrimitiveData {
   resistances?: LevelItem[];
@@ -14,6 +14,7 @@ export interface ZonesPrimitiveData {
   fvgConfluences?: FVGConfluenceItem[];
   trendlines?: TrendlineItem[];
   sweeps?: Array<LiquiditySweepItem>;
+  regressionChannel?: RegressionChannelItem | null;
   activeFormation: FormationFilter;
   theme?: 'dark' | 'light';
   currentTimeframe?: string;
@@ -70,6 +71,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
     fvgs: [],
     trendlines: [],
     sweeps: [],
+    regressionChannel: null,
     activeFormation: 'CASCADE',
   };
 
@@ -117,6 +119,7 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       fvgConfluences: data.fvgConfluences || [],
       trendlines: data.trendlines || [],
       sweeps: data.sweeps || [],
+      regressionChannel: data.regressionChannel !== undefined ? data.regressionChannel : this._data.regressionChannel,
       theme: data.theme || 'dark',
     };
     if (this._requestUpdate) {
@@ -182,9 +185,78 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
       return;
     }
 
-    // 2. Draw Trendlines (Наклонки) - Strictly per timeframe
+    // 2. Draw Trendlines (Наклонки) & Linear Regression Channel - Strictly per timeframe
     if (activeFormation === 'TRENDLINE') {
       const currentTf = this._data.currentTimeframe?.toLowerCase();
+
+      // 2.0 Draw Linear Regression Channel (OLS: y = kx + b)
+      const regChan = this._data.regressionChannel;
+      if (regChan && regChan.middle) {
+        const mid = regChan.middle;
+        const upper = regChan.upper;
+        const lower = regChan.lower;
+
+        const rx1 = timeScale.timeToCoordinate(mid.p1.time as any);
+        const rx2 = timeScale.timeToCoordinate(mid.p2.time as any);
+        const ryMid1 = candleSeries.priceToCoordinate(mid.p1.price);
+        const ryMid2 = candleSeries.priceToCoordinate(mid.p2.price);
+        const ryUp1 = upper ? candleSeries.priceToCoordinate(upper.p1.price) : null;
+        const ryUp2 = upper ? candleSeries.priceToCoordinate(upper.p2.price) : null;
+        const ryLow1 = lower ? candleSeries.priceToCoordinate(lower.p1.price) : null;
+        const ryLow2 = lower ? candleSeries.priceToCoordinate(lower.p2.price) : null;
+
+        if (rx1 !== null && rx2 !== null && ryMid1 !== null && ryMid2 !== null) {
+          // Channel semi-transparent fill
+          if (ryUp1 !== null && ryUp2 !== null && ryLow1 !== null && ryLow2 !== null) {
+            ctx.fillStyle = theme === 'dark' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(99, 102, 241, 0.05)';
+            ctx.beginPath();
+            ctx.moveTo(rx1, ryUp1);
+            ctx.lineTo(rx2, ryUp2);
+            ctx.lineTo(rx2, ryLow2);
+            ctx.lineTo(rx1, ryLow1);
+            ctx.closePath();
+            ctx.fill();
+
+            // Upper Channel Band (y = kx + b + 2*sigma)
+            ctx.strokeStyle = theme === 'dark' ? 'rgba(129, 140, 248, 0.7)' : 'rgba(99, 102, 241, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(rx1, ryUp1);
+            ctx.lineTo(rx2, ryUp2);
+            ctx.stroke();
+
+            // Lower Channel Band (y = kx + b - 2*sigma)
+            ctx.beginPath();
+            ctx.moveTo(rx1, ryLow1);
+            ctx.lineTo(rx2, ryLow2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          // Center Regression Line (y = kx + b)
+          ctx.strokeStyle = theme === 'dark' ? '#818cf8' : '#6366f1';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(rx1, ryMid1);
+          ctx.lineTo(rx2, ryMid2);
+          ctx.stroke();
+
+          // Anchor points on regression line
+          ctx.fillStyle = '#818cf8';
+          ctx.beginPath();
+          ctx.arc(rx1, ryMid1, 3, 0, Math.PI * 2);
+          ctx.arc(rx2, ryMid2, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Informational badge for regression channel
+          const r2Val = (regChan.rSquared ?? regChan.r_squared ?? 0).toFixed(2);
+          const slopeVal = regChan.slope > 0 ? `+${regChan.slope}` : `${regChan.slope}`;
+          const regText = `Канал регресії (R²: ${r2Val}, k: ${slopeVal})`;
+          drawBadge(ctx, regText, rx2 - 8, ryMid2, '#818cf8', 'right', theme);
+        }
+      }
 
       trendlines.forEach((tl) => {
         // Enforce strict timeframe independence on canvas

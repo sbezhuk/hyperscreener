@@ -73,15 +73,91 @@ def calculate_atr(candles: List[Dict[str, Any]], period: int = 14) -> float:
     return sum(window) / len(window) if window else 0.0
 
 
+def find_zigzag_swings(
+    candles: List[Dict[str, Any]],
+    interval: str = "5m",
+    atr: float = 0.0,
+    deviation_atr: float = 0.8,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    ATR-based ZigZag Swing Engine.
+    Filters micro-noise by requiring a reversal of at least deviation_atr * ATR.
+    Guarantees alternating high and low pivot points.
+    """
+    n = len(candles)
+    if n < 5:
+        return {"highs": [], "lows": []}
+
+    if atr <= 0:
+        atr = calculate_atr(candles, period=14)
+    if atr <= 0:
+        atr = max(candles[-1].get("close", 1.0) * 0.01, 0.0001)
+
+    threshold = max(deviation_atr * atr, 0.0001)
+
+    # State: 1 for seeking high, -1 for seeking low, 0 for initial
+    state = 0
+    candidate_high = {"price": candles[0]["high"], "time": candles[0]["time"], "index": 0, "volume": candles[0].get("volume", 0)}
+    candidate_low = {"price": candles[0]["low"], "time": candles[0]["time"], "index": 0, "volume": candles[0].get("volume", 0)}
+
+    raw_highs: List[Dict[str, Any]] = []
+    raw_lows: List[Dict[str, Any]] = []
+
+    for i in range(1, n):
+        c = candles[i]
+        h = c["high"]
+        l = c["low"]
+
+        if state == 0:
+            if h - candidate_low["price"] >= threshold:
+                raw_lows.append(candidate_low)
+                candidate_high = {"price": h, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+                state = 1
+            elif candidate_high["price"] - l >= threshold:
+                raw_highs.append(candidate_high)
+                candidate_low = {"price": l, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+                state = -1
+            else:
+                if h > candidate_high["price"]:
+                    candidate_high = {"price": h, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+                if l < candidate_low["price"]:
+                    candidate_low = {"price": l, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+
+        elif state == 1:  # seeking high
+            if h > candidate_high["price"]:
+                candidate_high = {"price": h, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+            elif candidate_high["price"] - l >= threshold:
+                raw_highs.append(candidate_high)
+                candidate_low = {"price": l, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+                state = -1
+
+        elif state == -1:  # seeking low
+            if l < candidate_low["price"]:
+                candidate_low = {"price": l, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+            elif h - candidate_low["price"] >= threshold:
+                raw_lows.append(candidate_low)
+                candidate_high = {"price": h, "time": c["time"], "index": i, "volume": c.get("volume", 0)}
+                state = 1
+
+    # Add final confirmed candidate if applicable
+    if state == 1 and (not raw_highs or candidate_high["index"] > raw_highs[-1]["index"]):
+        raw_highs.append(candidate_high)
+    elif state == -1 and (not raw_lows or candidate_low["index"] > raw_lows[-1]["index"]):
+        raw_lows.append(candidate_low)
+
+    return {"highs": raw_highs, "lows": raw_lows}
+
+
 def find_swings_for_trendlines(
     candles: List[Dict[str, Any]],
     interval: str = "5m",
     atr: float = 0.0,
     min_bar_gap: int = 3,
+    use_zigzag: bool = True,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Identifies high-significance Swing Highs and Swing Lows specifically for the given timeframe.
-    Considers left/right confirmation windows, volatility (ATR prominence), and minimum bar spacing.
+    Combines ATR-based ZigZag detection with left/right confirmation windows and volatility prominence.
     """
     n = len(candles)
     if n < 5:
@@ -118,7 +194,7 @@ def find_swings_for_trendlines(
 
         # 2. Swing Low check: strictly lower than neighbors
         is_low = all(candles[i - k]["low"] > curr_low for k in range(1, left_bars + 1)) and \
-                 all(candles[i + k]["low"] > curr_low for k in range(1, right_bars + 1))
+                  all(candles[i + k]["low"] > curr_low for k in range(1, right_bars + 1))
 
         if is_low:
             rise_left = max(candles[i - k]["high"] for k in range(1, left_bars + 1)) - curr_low
@@ -141,7 +217,16 @@ def find_swings_for_trendlines(
                 "volume": c.get("volume", 0),
             })
 
-    # Filter out excessive clusters closer than min_bar_gap
+    # Integrate ZigZag swings for structural macro-waves
+    if use_zigzag:
+        zz_res = find_zigzag_swings(candles, interval=clean_tf, atr=atr, deviation_atr=min_prominence_atr * 2.0)
+        raw_highs.extend(zz_res["highs"])
+        raw_lows.extend(zz_res["lows"])
+
+    # Sort and filter out excessive clusters closer than min_bar_gap
+    raw_highs.sort(key=lambda x: x["index"])
+    raw_lows.sort(key=lambda x: x["index"])
+
     filtered_highs: List[Dict[str, Any]] = []
     for h in raw_highs:
         if not filtered_highs:
@@ -720,10 +805,15 @@ def _evaluate_trendline_candidate(
         status=status,
     )
 
+    is_confirmed = (touch_count >= 3)
+    confirmation_status = "CONFIRMED" if is_confirmed else "FORMING"
+
     label_side = "Опір" if is_res else "Підтримка"
     label = f"Наклонка ({label_side})"
     timeframe_label = f"Наклонка ({label_side}) [{interval}]"
     if touch_count > 2:
+        timeframe_label += f" (x{touch_count} Підтверджена)"
+    else:
         timeframe_label += f" (x{touch_count})"
 
     direction = "DESCENDING" if is_res else "ASCENDING"
@@ -744,6 +834,11 @@ def _evaluate_trendline_candidate(
         },
         "slope": slope,
         "touch_count": int(touch_count),
+        "is_confirmed": is_confirmed,
+        "isConfirmed": is_confirmed,
+        "confirmation_status": confirmation_status,
+        "confirmationStatus": confirmation_status,
+        "touches_rule": "3_PLUS_TOUCHES" if is_confirmed else "2_TOUCH_PROVISIONAL",
         "strength": q_score,
         "status": status,
         "last_updated": last_updated,
@@ -797,9 +892,11 @@ def detect_timeframe_trendlines(
     include_broken: bool = False,
     max_lines_per_type: int = 1,
     htf_candles: Optional[List[Dict[str, Any]]] = None,
+    require_three_touches: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Independently detects and builds trendlines strictly from the candle history of the specified timeframe.
+    Prioritizes high-significance 3+ touch confirmed lines.
     Returns the top high-quality trendlines without visual duplicate lines.
     """
     if len(candles) < 8:
@@ -852,9 +949,29 @@ def detect_timeframe_trendlines(
                     continue
                 sup_candidates.append(candidate)
 
-    # Sort candidates by structural quality descending
-    res_candidates.sort(key=lambda x: (x["status"] == "ACTIVE", x["structural_quality"]), reverse=True)
-    sup_candidates.sort(key=lambda x: (x["status"] == "ACTIVE", x["structural_quality"]), reverse=True)
+    if require_three_touches:
+        res_candidates = [c for c in res_candidates if c.get("is_confirmed", False)]
+        sup_candidates = [c for c in sup_candidates if c.get("is_confirmed", False)]
+
+    # Sort candidates prioritizing confirmed lines (3+ touches), active status, and structural quality
+    res_candidates.sort(
+        key=lambda x: (
+            x.get("is_confirmed", False),
+            x["status"] == "ACTIVE",
+            x.get("touch_count", 0),
+            x["structural_quality"]
+        ),
+        reverse=True
+    )
+    sup_candidates.sort(
+        key=lambda x: (
+            x.get("is_confirmed", False),
+            x["status"] == "ACTIVE",
+            x.get("touch_count", 0),
+            x["structural_quality"]
+        ),
+        reverse=True
+    )
 
     # Deduplicate: avoid near-identical parallel lines
     def deduplicate(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -877,3 +994,122 @@ def detect_timeframe_trendlines(
     best_sup = deduplicate(sup_candidates)
 
     return best_res + best_sup
+
+
+def calculate_linear_regression_channel(
+    candles: List[Dict[str, Any]],
+    interval: str = "5m",
+    lookback: int = 60,
+    num_std: float = 2.0,
+) -> Optional[Dict[str, Any]]:
+    """
+    Computes Linear Regression Trendline and Channel using Ordinary Least Squares (OLS).
+    Formula:
+      y = k * x + b
+      k = Cov(x, y) / Var(x) = [ sum((x - mean(x)) * (y - mean(y))) ] / [ sum((x - mean(x))^2) ]
+      b = mean(y) - k * mean(x)
+      R^2 = 1 - (SS_res / SS_tot)
+      Upper/Lower bounds = y ± num_std * std_dev(residuals)
+    """
+    n_candles = len(candles)
+    if n_candles < 10:
+        return None
+
+    sample_size = min(n_candles, max(15, lookback))
+    sample = candles[-sample_size:]
+    N = len(sample)
+
+    y_values = [float(c["close"]) for c in sample]
+    x_mean = (N - 1) / 2.0
+    y_mean = sum(y_values) / N
+
+    cov_xy = 0.0
+    var_x = 0.0
+    ss_tot = 0.0
+
+    for i in range(N):
+        dx = i - x_mean
+        dy = y_values[i] - y_mean
+        cov_xy += dx * dy
+        var_x += dx * dx
+        ss_tot += dy * dy
+
+    if var_x == 0.0:
+        return None
+
+    k = cov_xy / var_x
+    b = y_mean - k * x_mean
+
+    ss_res = 0.0
+    for i in range(N):
+        pred_y = k * i + b
+        diff = y_values[i] - pred_y
+        ss_res += diff * diff
+
+    sigma = math.sqrt(ss_res / N)
+    if sigma < 1e-6:
+        atr_sample = calculate_atr(sample, 14)
+        sigma = atr_sample if atr_sample > 0 else max(curr_price * 0.005, 0.01)
+
+    r_squared = (1.0 - (ss_res / ss_tot)) if ss_tot > 1e-9 else 0.0
+    r_squared = max(0.0, min(1.0, r_squared))
+
+    p1_time = int(sample[0]["time"])
+    p2_time = int(sample[-1]["time"])
+
+    start_mid = b
+    end_mid = k * (N - 1) + b
+
+    start_upper = start_mid + num_std * sigma
+    end_upper = end_mid + num_std * sigma
+
+    start_lower = start_mid - num_std * sigma
+    end_lower = end_mid - num_std * sigma
+
+    curr_price = y_values[-1]
+    channel_width = end_upper - end_lower
+    if channel_width > 1e-6:
+        channel_pos_pct = round(((curr_price - end_lower) / channel_width) * 100.0, 1)
+    else:
+        channel_pos_pct = 50.0
+
+    if k > 0.0001 and r_squared >= 0.15:
+        direction = "ASCENDING"
+    elif k < -0.0001 and r_squared >= 0.15:
+        direction = "DESCENDING"
+    else:
+        direction = "FLAT"
+
+    price_precision = 2 if curr_price >= 1.0 else (4 if curr_price >= 0.01 else 6)
+    slope_precision = price_precision + 2
+
+    return {
+        "id": f"regchan-{interval.lower()}-{p1_time}-{p2_time}",
+        "timeframe": interval,
+        "slope": round(k, slope_precision),
+        "intercept": round(b, price_precision),
+        "r_squared": round(r_squared, 3),
+        "rSquared": round(r_squared, 3),
+        "std_dev": round(sigma, price_precision),
+        "stdDev": round(sigma, price_precision),
+        "num_std": num_std,
+        "numStd": num_std,
+        "direction": direction,
+        "sample_size": N,
+        "channel_position_pct": channel_pos_pct,
+        "channelPositionPct": channel_pos_pct,
+        "start_time": p1_time,
+        "end_time": p2_time,
+        "middle": {
+            "p1": {"time": p1_time, "price": round(start_mid, price_precision)},
+            "p2": {"time": p2_time, "price": round(end_mid, price_precision)},
+        },
+        "upper": {
+            "p1": {"time": p1_time, "price": round(start_upper, price_precision)},
+            "p2": {"time": p2_time, "price": round(end_upper, price_precision)},
+        },
+        "lower": {
+            "p1": {"time": p1_time, "price": round(start_lower, price_precision)},
+            "p2": {"time": p2_time, "price": round(end_lower, price_precision)},
+        },
+    }

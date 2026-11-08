@@ -292,36 +292,73 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                         <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 whitespace-nowrap flex-shrink-0">
                           Q: {Math.round(sig.structural_quality ?? sig.structuralQuality ?? sig.strength ?? 50)}
                         </span>
-                        <span
-                          className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
-                            sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
-                              ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
-                              : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
-                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                              : sig.interaction_state === 'COMPRESSION' || sig.interactionState === 'COMPRESSION'
-                              ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
-                              : sig.interaction_state === 'TESTING' || sig.interactionState === 'TESTING'
-                              ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'
-                              : sig.interaction_state === 'REJECTED' || sig.interactionState === 'REJECTED'
-                              ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
-                              : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                          }`}
-                        >
-                          {(() => {
-                            const state = sig.interaction_state || sig.interactionState || 'ACTIVE';
-                            const stateMap: Record<string, string> = {
-                              BREAKOUT: 'ПРОБІЙ',
-                              RETEST: 'РЕТЕСТ',
-                              COMPRESSION: 'СТИCНЕННЯ',
-                              TESTING: 'ТЕСТ',
-                              REJECTED: 'ВІДХИЛЕНО',
-                              APPROACHING: 'НАБЛИЖЕННЯ',
-                              STALE: 'ЗАСТАРІЛА',
-                              ACTIVE: 'АКТИВНА',
-                            };
-                            return stateMap[state] || state;
-                          })()}
-                        </span>
+                        {(sig.is_confirmed || sig.isConfirmed || (sig.touch_count ?? sig.touchCount ?? 0) >= 3) && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                            x3+ Підтверджена
+                          </span>
+                        )}
+                        {(sig.signal_type || sig.signalType) && (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
+                              (sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
+                                ? ((sig.is_retest || sig.isRetest) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30')
+                                : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                            }`}
+                          >
+                            {(sig.signal_type === 'BREAKOUT' || sig.signalType === 'BREAKOUT')
+                              ? ((sig.is_retest || sig.isRetest) ? 'РЕТЕСТ ПРОБОЮ' : 'ПРОБІЙ')
+                              : (sig.signal_type === 'BOUNCE' || sig.signalType === 'BOUNCE')
+                              ? 'ВІДСКОК'
+                              : 'АКТИВНА'}
+                          </span>
+                        )}
+                        {(sig.statusLabel || sig.status_label) && (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
+                              (sig.badgeColor === 'green' || sig.badge_color === 'green')
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : (sig.badgeColor === 'red' || sig.badge_color === 'red')
+                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                                : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                            }`}
+                          >
+                            {sig.statusLabel || sig.status_label}
+                          </span>
+                        )}
+                        {!(sig.signal_type || sig.signalType) && (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
+                              sig.interaction_state === 'BREAKOUT' || sig.interactionState === 'BREAKOUT'
+                                ? 'bg-rose-500/20 text-[#f6465d] border border-rose-500/30'
+                                : sig.interaction_state === 'RETEST' || sig.interactionState === 'RETEST'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                : sig.interaction_state === 'COMPRESSION' || sig.interactionState === 'COMPRESSION'
+                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                                : sig.interaction_state === 'TESTING' || sig.interactionState === 'TESTING'
+                                ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'
+                                : sig.interaction_state === 'REJECTED' || sig.interactionState === 'REJECTED'
+                                ? 'bg-emerald-500/20 text-[#0ecb81] border border-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                            }`}
+                          >
+                            {(() => {
+                              const state = sig.interaction_state || sig.interactionState || 'ACTIVE';
+                              const stateMap: Record<string, string> = {
+                                BREAKOUT: 'ПРОБІЙ',
+                                RETEST: 'РЕТЕСТ',
+                                COMPRESSION: 'СТИCНЕННЯ',
+                                TESTING: 'ТЕСТ',
+                                REJECTED: 'ВІДХИЛЕНО',
+                                APPROACHING: 'НАБЛИЖЕННЯ',
+                                STALE: 'ЗАСТАРІЛА',
+                                ACTIVE: 'АКТИВНА',
+                              };
+                              return stateMap[state] || state;
+                            })()}
+                          </span>
+                        )}
                         {(sig.htf_context || sig.htfContext) && (sig.htf_context !== 'UNAVAILABLE' && sig.htfContext !== 'UNAVAILABLE') && (
                           <span
                             className={`px-1 py-0.2 rounded text-[8px] font-bold whitespace-nowrap flex-shrink-0 ${
@@ -480,6 +517,11 @@ export const SidebarLevels: React.FC<SidebarLevelsProps> = ({
                             {flag === 'AGAINST_HTF' ? '⚠️ ПРОТИ HTF' : flag === 'COMPRESSION' ? '⚡ СТИСНЕННЯ' : flag === 'BREAKOUT' ? 'ПРОБІЙ' : flag === 'RETEST' ? 'РЕТЕСТ' : 'ЗАСТАРІЛА'}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {(sig.oiReason || sig.oi_reason) && (
+                      <div className="pt-0.5 border-t border-slate-200 dark:border-slate-800 text-[9px] text-slate-600 dark:text-gray-400">
+                        <b>OI:</b> {sig.oiReason || sig.oi_reason}
                       </div>
                     )}
                   </div>
