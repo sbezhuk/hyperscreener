@@ -138,7 +138,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   : 'ОФЛАЙН'}
               </span>
               {wsStatus === 'connected' ? (
-                <Power className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-rose-500" />
+                <Power className="w-2.5 h-2.5 ml-0.5 text-rose-500 dark:text-rose-400 transition-colors group-hover:text-rose-600 dark:group-hover:text-rose-300" />
               ) : wsStatus === 'reconnecting' ? (
                 <RefreshCcw className="w-2.5 h-2.5 animate-spin ml-0.5" />
               ) : (

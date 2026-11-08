@@ -40,6 +40,11 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
     { value: 80, label: '80+' },
   ];
 
+  const showMtf = active === 'CASCADE' || active === 'FVG';
+  const showStrength = active === 'CASCADE' || active === 'FVG';
+  const showOi = active === 'SWEEP' && Boolean(onToggleConfirmedOi);
+  const hasControls = showMtf || showStrength || showOi;
+
   return (
     <div className="w-full max-w-full px-2 sm:px-4 py-1.5 bg-slate-50 dark:bg-[#0b0e11] border-b border-slate-200 dark:border-[#1e2329] flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 select-none text-xs transition-colors no-scrollbar overflow-x-hidden">
       {/* Left: Formation selector */}
@@ -76,68 +81,74 @@ export const FormationsBar: React.FC<FormationsBarProps> = ({
         })}
       </div>
 
-      {/* Right: Multi-Timeframe Matrix & Strength Filter */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:border-l lg:border-slate-200 lg:dark:border-[#1e2329] lg:pl-3">
-        {/* MTF Badges */}
-        <div className="flex items-center gap-1">
-          <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">MTF:</span>
-          {mtfList.map((tf) => {
-            const isChecked = selectedTfs.includes(tf);
-            return (
-              <button
-                key={tf}
-                onClick={() => onToggleTf(tf)}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${isChecked
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm'
-                    : 'bg-white dark:bg-[#15191e] text-slate-400 dark:text-gray-500 border border-slate-300 dark:border-[#23272e] hover:text-slate-600 dark:hover:text-gray-400 opacity-70'
-                  }`}
-                title={`Фільтрувати рівні за ТФ ${tf}`}
-              >
-                {tf.toUpperCase()}
-              </button>
-            );
-          })}
-        </div>
+      {/* Right: Sub-controls dynamically tailored to the active formation */}
+      {hasControls && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:border-l lg:border-slate-200 lg:dark:border-[#1e2329] lg:pl-3">
+          {/* MTF Badges (Relevant for CASCADE & FVG) */}
+          {showMtf && (
+            <div className="flex items-center gap-1">
+              <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">MTF:</span>
+              {mtfList.map((tf) => {
+                const isChecked = selectedTfs.includes(tf);
+                return (
+                  <button
+                    key={tf}
+                    onClick={() => onToggleTf(tf)}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${isChecked
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm'
+                        : 'bg-white dark:bg-[#15191e] text-slate-400 dark:text-gray-500 border border-slate-300 dark:border-[#23272e] hover:text-slate-600 dark:hover:text-gray-400 opacity-70'
+                      }`}
+                    title={active === 'FVG' ? `Фільтрувати FVG за ТФ ${tf}` : `Фільтрувати рівні за ТФ ${tf}`}
+                  >
+                    {tf.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {/* Strength Filter */}
-        <div className="flex items-center gap-1 pl-2 border-l border-slate-200 dark:border-[#1e2329]">
-          <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Сила:</span>
-          {strengthOptions.map((opt) => {
-            const isSelected = minStrength === opt.value;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => onMinStrengthChange(opt.value)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${isSelected
-                    ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50'
-                    : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-300'
-                  }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
+          {/* Strength Filter (Relevant for CASCADE & FVG) */}
+          {showStrength && (
+            <div className={`flex items-center gap-1 ${showMtf ? 'pl-2 border-l border-slate-200 dark:border-[#1e2329]' : ''}`}>
+              <span className="text-slate-500 dark:text-gray-500 font-medium text-[11px] mr-1 whitespace-nowrap">Сила:</span>
+              {strengthOptions.map((opt) => {
+                const isSelected = minStrength === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => onMinStrengthChange(opt.value)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${isSelected
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-[#0ecb81] border border-emerald-400 dark:border-emerald-500/50'
+                        : 'bg-white dark:bg-[#15191e] text-slate-600 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-900 dark:hover:text-gray-300'
+                      }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {/* OI Confirmation Toggle for False Breakout */}
-        {active === 'SWEEP' && onToggleConfirmedOi && (
-          <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-[#1e2329]">
-            <button
-              onClick={onToggleConfirmedOi}
-              className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                onlyConfirmedOi
-                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm font-semibold'
-                  : 'bg-white dark:bg-[#15191e] text-slate-500 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-700 dark:hover:text-gray-300'
-              }`}
-              title="Фільтрувати тільки формації, підтверджені скороченням Open Interest"
-            >
-              <span className={`w-2 h-2 rounded-full ${onlyConfirmedOi ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-gray-600'}`} />
-              <span className="hidden sm:inline">Тільки підтверджені OI</span>
-              <span className="sm:hidden">Підтв. OI</span>
-            </button>
-          </div>
-        )}
-      </div>
+          {/* OI Confirmation Toggle for False Breakout (Relevant only for SWEEP) */}
+          {showOi && (
+            <div className={`flex items-center gap-1.5 ${showMtf || showStrength ? 'pl-2 border-l border-slate-200 dark:border-[#1e2329]' : ''}`}>
+              <button
+                onClick={onToggleConfirmedOi}
+                className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  onlyConfirmedOi
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 shadow-sm font-semibold'
+                    : 'bg-white dark:bg-[#15191e] text-slate-500 dark:text-gray-400 border border-slate-300 dark:border-[#23272e] hover:text-slate-700 dark:hover:text-gray-300'
+                }`}
+                title="Фільтрувати тільки формації, підтверджені скороченням Open Interest"
+              >
+                <span className={`w-2 h-2 rounded-full ${onlyConfirmedOi ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-gray-600'}`} />
+                <span className="hidden sm:inline">Тільки підтверджені OI</span>
+                <span className="sm:hidden">Підтв. OI</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

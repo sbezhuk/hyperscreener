@@ -232,7 +232,94 @@ describe('Phase 5.3 — Responsive UI & Drawer Lifecycle Verification', () => {
     assert.match(text, /Рівні/, 'Mobile short label must be present');
   });
 
-  test('8. TopBar mobile 2-tier responsive layout renders timeframe buttons cleanly', () => {
+  test('8. FormationsBar conditionally hides irrelevant sections according to active formation', () => {
+    // 1. CASCADE: MTF & Strength visible, OI hidden
+    const resCascade = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'CASCADE',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+        onlyConfirmedOi: false,
+        onToggleConfirmedOi: () => {},
+      })
+    );
+    assert.match(resCascade.container.textContent || '', /MTF:/, 'CASCADE must show MTF');
+    assert.match(resCascade.container.textContent || '', /Сила:/, 'CASCADE must show Strength');
+    assert.doesNotMatch(resCascade.container.textContent || '', /Тільки підтверджені OI/, 'CASCADE must hide OI toggle');
+
+    // 2. SWEEP: OI visible, MTF & Strength hidden
+    const resSweep = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'SWEEP',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+        onlyConfirmedOi: false,
+        onToggleConfirmedOi: () => {},
+      })
+    );
+    assert.doesNotMatch(resSweep.container.textContent || '', /MTF:/, 'SWEEP must hide MTF');
+    assert.doesNotMatch(resSweep.container.textContent || '', /Сила:/, 'SWEEP must hide Strength');
+    assert.match(resSweep.container.textContent || '', /Тільки підтверджені OI/, 'SWEEP must show OI toggle');
+
+    // 3. FVG: MTF & Strength visible, OI hidden
+    const resFvg = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'FVG',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+        onlyConfirmedOi: false,
+        onToggleConfirmedOi: () => {},
+      })
+    );
+    assert.match(resFvg.container.textContent || '', /MTF:/, 'FVG must show MTF');
+    assert.match(resFvg.container.textContent || '', /Сила:/, 'FVG must show Strength');
+    assert.doesNotMatch(resFvg.container.textContent || '', /Тільки підтверджені OI/, 'FVG must hide OI toggle');
+
+    // 4. TRENDLINE: All sub-controls hidden
+    const resTrendline = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'TRENDLINE',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+        onlyConfirmedOi: false,
+        onToggleConfirmedOi: () => {},
+      })
+    );
+    assert.doesNotMatch(resTrendline.container.textContent || '', /MTF:/, 'TRENDLINE must hide MTF');
+    assert.doesNotMatch(resTrendline.container.textContent || '', /Сила:/, 'TRENDLINE must hide Strength');
+    assert.doesNotMatch(resTrendline.container.textContent || '', /Тільки підтверджені OI/, 'TRENDLINE must hide OI toggle');
+
+    // 5. NONE: All sub-controls hidden
+    const resNone = rtlRender(
+      React.createElement(FormationsBar, {
+        active: 'NONE',
+        onChange: () => {},
+        selectedTfs: ['1h'],
+        onToggleTf: () => {},
+        minStrength: 50,
+        onMinStrengthChange: () => {},
+        onlyConfirmedOi: false,
+        onToggleConfirmedOi: () => {},
+      })
+    );
+    assert.doesNotMatch(resNone.container.textContent || '', /MTF:/, 'NONE must hide MTF');
+    assert.doesNotMatch(resNone.container.textContent || '', /Сила:/, 'NONE must hide Strength');
+    assert.doesNotMatch(resNone.container.textContent || '', /Тільки підтверджені OI/, 'NONE must hide OI toggle');
+  });
+
+  test('9. TopBar mobile 2-tier responsive layout renders timeframe buttons cleanly', () => {
     const { container } = rtlRender(
       React.createElement(
         ThemeProvider,
