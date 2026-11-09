@@ -658,10 +658,6 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           fillColor = `rgba(168, 85, 247, ${opacity})`;
           strokeColor = `rgba(168, 85, 247, ${r.touches >= 3 ? 0.75 : 0.45})`;
           badgeColor = 'rgba(168, 85, 247, 0.95)';
-        } else if (isBreaker) {
-          fillColor = `rgba(245, 158, 11, ${opacity})`;
-          strokeColor = `rgba(245, 158, 11, 0.65)`;
-          badgeColor = 'rgba(245, 158, 11, 0.95)';
         } else if (isLiqPool) {
           fillColor = `rgba(239, 68, 68, ${opacity * 0.9})`;
           strokeColor = `rgba(239, 68, 68, 0.75)`;
@@ -734,10 +730,6 @@ export class ZonesPrimitive implements ISeriesPrimitive<Time> {
           fillColor = `rgba(168, 85, 247, ${opacity})`;
           strokeColor = `rgba(168, 85, 247, ${s.touches >= 3 ? 0.75 : 0.45})`;
           badgeColor = 'rgba(168, 85, 247, 0.95)';
-        } else if (isBreaker) {
-          fillColor = `rgba(59, 130, 246, ${opacity})`;
-          strokeColor = `rgba(59, 130, 246, 0.65)`;
-          badgeColor = 'rgba(59, 130, 246, 0.95)';
         } else if (isLiqPool) {
           fillColor = `rgba(16, 185, 129, ${opacity * 0.9})`;
           strokeColor = `rgba(16, 185, 129, 0.75)`;

@@ -839,7 +839,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                 {/* Row 1: Badges & Label on Left, Distance % on Right */}
                 <div className="flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.smc_type === 'BREAKER_BLOCK' ? 'bg-amber-500' : 'bg-[#f6465d]'}`} />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#f6465d]" />
                     <span className="font-semibold text-xs font-sans text-slate-800 dark:text-gray-100 whitespace-nowrap">
                       {r.smc_label || (r.smc_type === 'BREAKER_BLOCK' ? 'Breaker' : 'Опір')}
                     </span>
@@ -916,7 +916,7 @@ Risk/Reward: 1:${tradeSetup.risk_reward?.toFixed(1)}
                 {/* Row 1: Badges & Label on Left, Distance % on Right */}
                 <div className="flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.smc_type === 'BREAKER_BLOCK' ? 'bg-blue-500' : 'bg-[#0ecb81]'}`} />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0ecb81]" />
                     <span className="font-semibold text-xs font-sans text-slate-800 dark:text-gray-100 whitespace-nowrap">
                       {s.smc_label || (s.smc_type === 'BREAKER_BLOCK' ? 'Breaker' : 'Підтримка')}
                     </span>
